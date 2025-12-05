@@ -26,6 +26,8 @@ import static org.apache.hop.pipeline.Pipeline.BitMaskStatus.PREPARING;
 import static org.apache.hop.pipeline.Pipeline.BitMaskStatus.RUNNING;
 import static org.apache.hop.pipeline.Pipeline.BitMaskStatus.STOPPED;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -40,14 +42,13 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.vfs2.FileName;
 import org.apache.commons.vfs2.FileObject;
 import org.apache.hop.core.BlockingBatchingRowSet;
 import org.apache.hop.core.BlockingRowSet;
 import org.apache.hop.core.Const;
+import org.apache.hop.core.HopVersionProvider;
 import org.apache.hop.core.IExecutor;
 import org.apache.hop.core.IExtensionData;
 import org.apache.hop.core.IRowSet;
@@ -548,6 +549,10 @@ public abstract class Pipeline
     this.log = new LogChannel(this, parent, isGatheringMetrics(), true);
     this.log.setLogLevel(logLevel);
 
+    // We changed the log channel which changes a few internal variables:
+    //
+    setInternalLoggingVariables();
+
     if (this.containerObjectId == null) {
       this.containerObjectId = log.getContainerObjectId();
     }
@@ -586,11 +591,9 @@ public abstract class Pipeline
               PKG, "Pipeline.Log.ExecutionStartedForPipeline", pipelineMeta.getName()));
     }
 
-    if (isSafeModeEnabled()) {
-      if (log.isDetailed()) {
-        log.logDetailed(
-            BaseMessages.getString(PKG, "Pipeline.Log.SafeModeIsEnabled", pipelineMeta.getName()));
-      }
+    if (isSafeModeEnabled() && log.isDetailed()) {
+      log.logDetailed(
+          BaseMessages.getString(PKG, "Pipeline.Log.SafeModeIsEnabled", pipelineMeta.getName()));
     }
 
     // setInternalHopVariables(this); --> Let's not do this, when running
@@ -843,7 +846,7 @@ public abstract class Pipeline
                     .getTransformPartitioningMeta()
                     .getPartitionSchema()
                     .calculatePartitionIds(this);
-            if (partitionIDs != null && !partitionIDs.isEmpty()) {
+            if (!Utils.isEmpty(partitionIDs)) {
               transform.setPartitionId(partitionIDs.get(c)); // Pass the partition ID
               // to the transform
             }
@@ -1217,7 +1220,6 @@ public abstract class Pipeline
     pipelineWaitUntilFinishedBlockingQueue = new ArrayBlockingQueue<>(10);
 
     // Do all sorts of nifty things at the end of the pipeline execution
-    ///
     IExecutionFinishedListener<IPipelineEngine<PipelineMeta>> executionListener =
         pipeline -> {
           try {
@@ -2219,35 +2221,24 @@ public abstract class Pipeline
         FileName fileName = fileObject.getName();
 
         // The filename of the pipeline
-        variables.setVariable(
-            Const.INTERNAL_VARIABLE_PIPELINE_FILENAME_NAME, fileName.getBaseName());
+        setVariable(Const.INTERNAL_VARIABLE_PIPELINE_FILENAME_NAME, fileName.getBaseName());
 
         // The directory of the pipeline
         FileName fileDir = fileName.getParent();
-        variables.setVariable(
-            Const.INTERNAL_VARIABLE_PIPELINE_FILENAME_DIRECTORY, fileDir.getURI());
+        setVariable(Const.INTERNAL_VARIABLE_PIPELINE_FILENAME_DIRECTORY, fileDir.getURI());
       } catch (HopFileException e) {
-        variables.setVariable(Const.INTERNAL_VARIABLE_PIPELINE_FILENAME_DIRECTORY, "");
-        variables.setVariable(Const.INTERNAL_VARIABLE_PIPELINE_FILENAME_NAME, "");
+        setVariable(Const.INTERNAL_VARIABLE_PIPELINE_FILENAME_DIRECTORY, "");
+        setVariable(Const.INTERNAL_VARIABLE_PIPELINE_FILENAME_NAME, "");
       }
     } else {
-      variables.setVariable(Const.INTERNAL_VARIABLE_PIPELINE_FILENAME_DIRECTORY, "");
-      variables.setVariable(Const.INTERNAL_VARIABLE_PIPELINE_FILENAME_NAME, "");
+      setVariable(Const.INTERNAL_VARIABLE_PIPELINE_FILENAME_DIRECTORY, "");
+      setVariable(Const.INTERNAL_VARIABLE_PIPELINE_FILENAME_NAME, "");
     }
 
     // The name of the pipeline
-    variables.setVariable(
-        Const.INTERNAL_VARIABLE_PIPELINE_NAME, Const.NVL(pipelineMeta.getName(), ""));
+    setVariable(Const.INTERNAL_VARIABLE_PIPELINE_NAME, Const.NVL(pipelineMeta.getName(), ""));
 
-    // The ID of the pipeline (log channel ID)
-    variables.setVariable(
-        Const.INTERNAL_VARIABLE_PIPELINE_ID, log != null ? log.getLogChannelId() : "");
-
-    if (parent != null) {
-      this.setVariable(Const.INTERNAL_VARIABLE_PIPELINE_PARENT_ID, parent.getLogChannelId());
-    } else {
-      this.setVariable(Const.INTERNAL_VARIABLE_PIPELINE_PARENT_ID, null);
-    }
+    setInternalLoggingVariables();
 
     // Here we don't clear the definition of the workflow specific parameters, as they may come in
     // handy.
@@ -2255,12 +2246,26 @@ public abstract class Pipeline
     // but the other around is not possible.
 
     setInternalEntryCurrentDirectory(hasFilename);
+
+    HopVersionProvider versionProvider = new HopVersionProvider();
+    setVariable(Const.HOP_VERSION, versionProvider.getVersion()[0]);
+  }
+
+  private void setInternalLoggingVariables() {
+    // The ID of the pipeline (log channel ID)
+    setVariable(Const.INTERNAL_VARIABLE_PIPELINE_ID, log != null ? log.getLogChannelId() : "");
+
+    if (parent != null) {
+      setVariable(Const.INTERNAL_VARIABLE_PIPELINE_PARENT_ID, parent.getLogChannelId());
+    } else {
+      setVariable(Const.INTERNAL_VARIABLE_PIPELINE_PARENT_ID, null);
+    }
   }
 
   protected void setInternalEntryCurrentDirectory(boolean hasFilename) {
-    variables.setVariable(
+    setVariable(
         Const.INTERNAL_VARIABLE_ENTRY_CURRENT_FOLDER,
-        variables.getVariable(
+        getVariable(
             hasFilename
                 ? Const.INTERNAL_VARIABLE_PIPELINE_FILENAME_DIRECTORY
                 : Const.INTERNAL_VARIABLE_ENTRY_CURRENT_FOLDER));

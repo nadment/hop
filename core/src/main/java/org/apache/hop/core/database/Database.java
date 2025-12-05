@@ -773,7 +773,7 @@ public class Database implements IVariables, ILoggingObject, AutoCloseable {
    */
   public void prepareInsert(IRowMeta rowMeta, String schemaName, String tableName)
       throws HopDatabaseException {
-    if (rowMeta.size() == 0) {
+    if (rowMeta.isEmpty()) {
       throw new HopDatabaseException("No fields in row, can't insert!");
     }
 
@@ -2104,6 +2104,7 @@ public class Database implements IVariables, ILoggingObject, AutoCloseable {
           try {
             fields = getQueryFieldsFallback(sql, param, inform, data);
           } catch (HopDatabaseException ignore) {
+            // Do nothing
           }
         }
       }
@@ -2583,7 +2584,7 @@ public class Database implements IVariables, ILoggingObject, AutoCloseable {
         }
       }
 
-      if (orderby != null && orderby.length() != 0) {
+      if (!Utils.isEmpty(orderby)) {
         sql.append(" ORDER BY ").append(orderby);
       }
 
@@ -2734,7 +2735,7 @@ public class Database implements IVariables, ILoggingObject, AutoCloseable {
       int pos = 0;
 
       sql.append("{ ");
-      if (returnvalue != null && returnvalue.length() != 0) {
+      if (!Utils.isEmpty(returnvalue)) {
         sql.append("? = ");
       }
       sql.append("call " + proc + " ");
@@ -3024,7 +3025,7 @@ public class Database implements IVariables, ILoggingObject, AutoCloseable {
       }
     }
 
-    if (missing.size() != 0) {
+    if (!missing.isEmpty()) {
       for (int i = 0; i < missing.size(); i++) {
         IValueMeta v = missing.getValueMeta(i);
         retval.append(
@@ -3042,7 +3043,7 @@ public class Database implements IVariables, ILoggingObject, AutoCloseable {
       }
     }
 
-    if (surplus.size() != 0) {
+    if (!surplus.isEmpty()) {
       for (int i = 0; i < surplus.size(); i++) {
         IValueMeta v = surplus.getValueMeta(i);
         retval.append(
@@ -3069,7 +3070,7 @@ public class Database implements IVariables, ILoggingObject, AutoCloseable {
       }
     }
 
-    if (modify.size() > 0) {
+    if (!modify.isEmpty()) {
       for (int i = 0; i < modify.size(); i++) {
         IValueMeta v = modify.getValueMeta(i);
         retval.append(
@@ -3250,12 +3251,8 @@ public class Database implements IVariables, ILoggingObject, AutoCloseable {
 
         par.addValueMeta(val);
       }
-    } catch (AbstractMethodError e) {
+    } catch (AbstractMethodError | Exception e) {
       // Oops: probably the database or JDBC doesn't support it.
-      return null;
-    } catch (SQLException e) {
-      return null;
-    } catch (Exception e) {
       return null;
     }
 
@@ -3619,7 +3616,7 @@ public class Database implements IVariables, ILoggingObject, AutoCloseable {
         }
 
         // Check for any extra properties that might require validation
-        if (props != null && !props.isEmpty()) {
+        if (!Utils.isEmpty(props)) {
           for (Map.Entry<String, String> prop : props.entrySet()) {
             String propName = prop.getKey();
 
@@ -4177,7 +4174,7 @@ public class Database implements IVariables, ILoggingObject, AutoCloseable {
       boolean moreResults = cstmt.execute();
       ret = new RowMetaAndData();
       int pos = 1;
-      if (resultname != null && resultname.length() != 0) {
+      if (!Utils.isEmpty(resultname)) {
         IValueMeta vMeta = ValueMetaFactory.createValueMeta(resultname, resulttype);
         Object v = null;
         switch (resulttype) {
@@ -4425,12 +4422,12 @@ public class Database implements IVariables, ILoggingObject, AutoCloseable {
                       .append(fieldDateFormatters[i].format(date))
                       .append("', 'YYYY/MM/DD HH24:MI:SS')");
                 } else {
-                  ins.append("'" + fields.getString(r, i) + "'");
+                  ins.append("'").append(fields.getString(r, i)).append("'");
                 }
               } else {
                 try {
                   java.text.SimpleDateFormat formatter = new java.text.SimpleDateFormat(dateFormat);
-                  ins.append("'" + formatter.format(fields.getDate(r, i)) + "'");
+                  ins.append("'").append(formatter.format(fields.getDate(r, i))).append("'");
                 } catch (Exception e) {
                   throw new HopDatabaseException("Error : ", e);
                 }
@@ -4663,7 +4660,7 @@ public class Database implements IVariables, ILoggingObject, AutoCloseable {
         if (Utils.isEmpty(sLine)) {
           sql.append(Const.CR);
         } else {
-          sql.append(Const.CR + sLine);
+          sql.append(Const.CR).append(sLine);
         }
       }
 

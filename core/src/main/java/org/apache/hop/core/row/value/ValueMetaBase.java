@@ -76,6 +76,7 @@ import org.apache.hop.core.logging.ILogChannel;
 import org.apache.hop.core.row.IValueMeta;
 import org.apache.hop.core.row.ValueDataUtil;
 import org.apache.hop.core.util.EnvUtil;
+import org.apache.hop.core.util.JsonUtil;
 import org.apache.hop.core.util.Utils;
 import org.apache.hop.core.variables.IVariables;
 import org.apache.hop.core.xml.XmlHandler;
@@ -465,7 +466,8 @@ public class ValueMetaBase implements IValueMeta {
         && getPrecision() == that.getPrecision()
         && type == that.type
         && trimType == that.trimType
-        && roundingType == that.roundingType
+        && ((roundingType == null && that.roundingType == null)
+            || (roundingType != null && roundingType.equals(that.roundingType)))
         && storageType == that.storageType
         && collatorStrength == that.collatorStrength
         && caseInsensitive == that.caseInsensitive
@@ -2404,7 +2406,7 @@ public class ValueMetaBase implements IValueMeta {
             toString() + " : I don't know how to convert a serializable value to JSON object.");
 
       default:
-        throw new HopValueException(toString() + " : Unknown type " + type + MSG_SPECIFIED);
+        throw new HopValueException(toString() + MSG_UNKNOWN_TYPE + type + MSG_SPECIFIED);
     }
   }
 
@@ -3241,6 +3243,12 @@ public class ValueMetaBase implements IValueMeta {
     return type == TYPE_BOOLEAN;
   }
 
+  @Override
+  @JsonIgnore
+  public boolean isJson() {
+    return type == TYPE_JSON;
+  }
+
   /**
    * Checks whether or not this value is of type Serializable
    *
@@ -3532,9 +3540,7 @@ public class ValueMetaBase implements IValueMeta {
     if (jsonNode == null) {
       outputStream.writeInt(-1);
     } else {
-      ObjectMapper objectMapper = new ObjectMapper();
-      String string = objectMapper.writeValueAsString(jsonNode);
-      byte[] chars = string.getBytes(StandardCharsets.UTF_8);
+      byte[] chars = JsonUtil.mapJsonToBytes(jsonNode);
       outputStream.writeInt(chars.length);
       outputStream.write(chars);
     }
@@ -3574,8 +3580,7 @@ public class ValueMetaBase implements IValueMeta {
     byte[] chars = new byte[inputLength];
     inputStream.readFully(chars);
 
-    ObjectMapper objectMapper = new ObjectMapper();
-    return objectMapper.readTree(chars, 0, inputLength);
+    return JsonUtil.jsonMapper().readTree(chars, 0, inputLength);
   }
 
   protected byte[] readBinaryString(DataInputStream inputStream) throws IOException {
@@ -4319,7 +4324,7 @@ public class ValueMetaBase implements IValueMeta {
 
       // If it's a string and the string is empty, it's a null value as well
       //
-      return isString() && value.toString().length() == 0;
+      return isString() && value.toString().isEmpty();
 
       // We tried everything else so we assume this value is not null.
       //
@@ -4377,7 +4382,7 @@ public class ValueMetaBase implements IValueMeta {
     }
   }
 
-  private int typeCompare(Object data1, Object data2) throws HopValueException {
+  protected int typeCompare(Object data1, Object data2) throws HopValueException {
     int cmp = 0;
     switch (getType()) {
       case TYPE_STRING:
@@ -4432,7 +4437,7 @@ public class ValueMetaBase implements IValueMeta {
         byte[] b1 = (byte[]) data1;
         byte[] b2 = (byte[]) data2;
 
-        int byteLength = b1.length < b2.length ? b1.length : b2.length;
+        int byteLength = Math.min(b1.length, b2.length);
 
         cmp = b1.length - b2.length;
         if (cmp == 0) {
@@ -4637,7 +4642,12 @@ public class ValueMetaBase implements IValueMeta {
       case TYPE_JSON:
         return getJson(data);
       default:
-        throw new HopValueException(this + CONST_CANNOT_CONVERT + conversionMetadata.getType());
+        // Generic plugin-aware path
+        try {
+          return conversionMetadata.convertData(this, data);
+        } catch (Exception e) {
+          throw new HopValueException(this + CONST_CANNOT_CONVERT + conversionMetadata.getType());
+        }
     }
   }
 
@@ -4698,14 +4708,13 @@ public class ValueMetaBase implements IValueMeta {
     // See if we need to convert a null value into a String
     // For example, we might want to convert null into "Empty".
     //
-    if (!Utils.isEmpty(ifNull)) {
+    if (!Utils.isEmpty(ifNull)
+        && (Utils.isEmpty(pol)
+            || pol.equalsIgnoreCase(Const.rightPad(new StringBuilder(nullValue), pol.length())))) {
       // Note that you can't pull the pad method up here as a nullComp variable
       // because you could get an NPE since you haven't checked isEmpty(pol)
       // yet!
-      if (Utils.isEmpty(pol)
-          || pol.equalsIgnoreCase(Const.rightPad(new StringBuilder(nullValue), pol.length()))) {
-        pol = ifNull;
-      }
+      pol = ifNull;
     }
 
     // See if the polled value is empty
@@ -4751,7 +4760,7 @@ public class ValueMetaBase implements IValueMeta {
     switch (trimType) {
       case IValueMeta.TRIM_TYPE_LEFT:
         strpol = new StringBuilder(pol);
-        while (strpol.length() > 0 && strpol.charAt(0) == ' ') {
+        while (!strpol.isEmpty() && strpol.charAt(0) == ' ') {
           strpol.deleteCharAt(0);
         }
         pol = strpol.toString();
@@ -4759,7 +4768,7 @@ public class ValueMetaBase implements IValueMeta {
         break;
       case IValueMeta.TRIM_TYPE_RIGHT:
         strpol = new StringBuilder(pol);
-        while (strpol.length() > 0 && strpol.charAt(strpol.length() - 1) == ' ') {
+        while (!strpol.isEmpty() && strpol.charAt(strpol.length() - 1) == ' ') {
           strpol.deleteCharAt(strpol.length() - 1);
         }
         pol = strpol.toString();
@@ -4767,10 +4776,10 @@ public class ValueMetaBase implements IValueMeta {
         break;
       case IValueMeta.TRIM_TYPE_BOTH:
         strpol = new StringBuilder(pol);
-        while (strpol.length() > 0 && strpol.charAt(0) == ' ') {
+        while (!strpol.isEmpty() && strpol.charAt(0) == ' ') {
           strpol.deleteCharAt(0);
         }
-        while (strpol.length() > 0 && strpol.charAt(strpol.length() - 1) == ' ') {
+        while (!strpol.isEmpty() && strpol.charAt(strpol.length() - 1) == ' ') {
           strpol.deleteCharAt(strpol.length() - 1);
         }
         pol = strpol.toString();
@@ -4828,6 +4837,7 @@ public class ValueMetaBase implements IValueMeta {
           break;
         case TYPE_JSON:
           hash ^= 512;
+          break;
         case TYPE_NONE:
           break;
         default:
@@ -5468,12 +5478,7 @@ public class ValueMetaBase implements IValueMeta {
             length = rm.getScale(index);
           }
           break;
-
-        case Types.DATE:
-          if (databaseMeta.getIDatabase().isTeradataVariant()) {
-            precision = 1;
-          }
-        case Types.TIME:
+        case Types.DATE, Types.TIME:
           valtype = IValueMeta.TYPE_DATE;
           //
           if (databaseMeta.getIDatabase().isMySqlVariant()) {
@@ -5484,9 +5489,12 @@ public class ValueMetaBase implements IValueMeta {
                 && rm.getColumnTypeName(index).equalsIgnoreCase("YEAR")) {
               valtype = IValueMeta.TYPE_INTEGER;
               precision = 0;
+
               length = 4;
-              break;
             }
+          }
+          if (databaseMeta.getIDatabase().isTeradataVariant()) {
+            precision = 1;
           }
           break;
 
@@ -5551,6 +5559,7 @@ public class ValueMetaBase implements IValueMeta {
 
       IValueMeta newV = null;
       try {
+        // JSON type is handled here because its type is 1111 (Object) when reading from SQL
         newV = databaseMeta.getIDatabase().customizeValueFromSqlType(v, rm, index);
       } catch (SQLException e) {
         throw new SQLException(e);
@@ -5749,12 +5758,7 @@ public class ValueMetaBase implements IValueMeta {
             length = originalScale;
           }
           break;
-
-        case Types.DATE:
-          if (databaseMeta.getIDatabase().isTeradataVariant()) {
-            precision = 1;
-          }
-        case Types.TIME:
+        case Types.TIME, Types.DATE:
           valtype = IValueMeta.TYPE_DATE;
           //
           if (databaseMeta.isMySqlVariant()) {
@@ -5768,6 +5772,9 @@ public class ValueMetaBase implements IValueMeta {
               length = 4;
               break;
             }
+          }
+          if (databaseMeta.getIDatabase().isTeradataVariant()) {
+            precision = 1;
           }
           break;
 

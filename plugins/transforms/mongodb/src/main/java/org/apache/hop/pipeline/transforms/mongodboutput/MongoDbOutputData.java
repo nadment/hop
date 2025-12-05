@@ -17,6 +17,7 @@
 
 package org.apache.hop.pipeline.transforms.mongodboutput;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.mongodb.BasicDBList;
 import com.mongodb.BasicDBObject;
 import com.mongodb.DBObject;
@@ -28,12 +29,15 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hop.core.exception.HopException;
 import org.apache.hop.core.exception.HopValueException;
 import org.apache.hop.core.logging.ILogChannel;
 import org.apache.hop.core.row.IRowMeta;
 import org.apache.hop.core.row.IValueMeta;
+import org.apache.hop.core.row.value.ValueMetaFactory;
+import org.apache.hop.core.util.Utils;
 import org.apache.hop.core.variables.IVariables;
 import org.apache.hop.i18n.BaseMessages;
 import org.apache.hop.mongo.MongoDbException;
@@ -41,6 +45,7 @@ import org.apache.hop.mongo.metadata.MongoDbConnection;
 import org.apache.hop.mongo.wrapper.MongoClientWrapper;
 import org.apache.hop.mongo.wrapper.collection.MongoCollectionWrapper;
 import org.apache.hop.mongo.wrapper.cursor.MongoCursorWrapper;
+import org.apache.hop.mongo.wrapper.field.MongoField;
 import org.apache.hop.pipeline.transform.BaseTransformData;
 import org.apache.hop.pipeline.transform.ITransformData;
 
@@ -277,7 +282,7 @@ public class MongoDbOutputData extends BaseTransformData implements ITransformDa
         // strip off brackets to get actual object name if terminal object
         // is an array
         if (name.contains("[")) {
-          name = name.substring(name.indexOf('[') + 1, name.length());
+          name = name.substring(name.indexOf('[') + 1);
         }
 
         mongoIndex.put(name, direction);
@@ -437,7 +442,7 @@ public class MongoDbOutputData extends BaseTransformData implements ITransformDa
               && path.contains("[")
               && !path.contains(mongoOperatorUpdateAllArray)) {
             String arrayPath = path.substring(0, path.indexOf('['));
-            String arraySpec = path.substring(path.indexOf('['), path.length());
+            String arraySpec = path.substring(path.indexOf('['));
             MongoDbOutputMeta.MongoField a = new MongoDbOutputMeta.MongoField();
             a.incomingFieldName = field.incomingFieldName;
             a.environUpdatedFieldName = field.environUpdatedFieldName;
@@ -459,13 +464,13 @@ public class MongoDbOutputData extends BaseTransformData implements ITransformDa
             // we ignore any index that might have been specified as $push
             // always appends to the end of the array.
             String arrayPath = path.substring(0, path.indexOf('['));
-            String structureToPush = path.substring(path.indexOf(']') + 1, path.length());
+            String structureToPush = path.substring(path.indexOf(']') + 1);
 
             // check to see if we're pushing a record at this point in the path
             // or another array...
             if (structureToPush.charAt(0) == '.') {
               // skip the dot
-              structureToPush = structureToPush.substring(1, structureToPush.length());
+              structureToPush = structureToPush.substring(1);
             }
 
             MongoDbOutputMeta.MongoField a = new MongoDbOutputMeta.MongoField();
@@ -707,6 +712,8 @@ public class MongoDbOutputData extends BaseTransformData implements ITransformDa
           IValueMeta vm = inputMeta.getValueMeta(index);
           if (!vm.isNull(row[index])) {
             String jsonDoc = vm.getString(row[index]);
+            // TODO: change JSON.parse into Document.parse and adjust all the returned
+            //  types since the mongoObject.put() accepts a Document and JSON is deprecated
             return (DBObject) JSON.parse(jsonDoc);
           } else {
             return null;
@@ -783,7 +790,7 @@ public class MongoDbOutputData extends BaseTransformData implements ITransformDa
             // no more path parts so we must be setting a field in an array
             // element
             // that is a record
-            if ((pathParts == null || pathParts.isEmpty()) && current instanceof BasicDBObject) {
+            if ((Utils.isEmpty(pathParts)) && current instanceof BasicDBObject) {
               if (field.useIncomingFieldNameAsMongoFieldName) {
                 boolean res =
                     setMongoValueFromHopValue(
@@ -879,60 +886,90 @@ public class MongoDbOutputData extends BaseTransformData implements ITransformDa
       }
     }
 
-    if (hopType.isString()) {
-      String val = hopType.getString(hopValue);
-      if (hopValueIsJSON) {
-        Object mongoO = JSON.parse(val);
-        mongoObject.put(lookup.toString(), mongoO);
-      } else {
-        mongoObject.put(lookup.toString(), val);
-      }
-      return true;
-    }
-    if (hopType.isBoolean()) {
-      Boolean val = hopType.getBoolean(hopValue);
-      mongoObject.put(lookup.toString(), val);
-      return true;
-    }
-    if (hopType.isInteger()) {
-      Long val = hopType.getInteger(hopValue);
-      mongoObject.put(lookup.toString(), val.longValue());
-      return true;
-    }
-    if (hopType.isDate()) {
-      Date val = hopType.getDate(hopValue);
-      mongoObject.put(lookup.toString(), val);
-      return true;
-    }
-    if (hopType.isNumber()) {
-      Double val = hopType.getNumber(hopValue);
-      mongoObject.put(lookup.toString(), val.doubleValue());
-      return true;
-    }
-    if (hopType.isBigNumber()) {
-      // use string value - user can use Hop to convert back
-      String val = hopType.getString(hopValue);
-      mongoObject.put(lookup.toString(), val);
-      return true;
-    }
-    if (hopType.isBinary()) {
-      byte[] val = hopType.getBinary(hopValue);
-      mongoObject.put(lookup.toString(), val);
-      return true;
-    }
-    if (hopType.isSerializableType()) {
-      throw new HopValueException(
-          BaseMessages.getString(
-              PKG, "MongoDbOutput.Messages.Error.CantStoreHopSerializableVals")); //
-    }
+    switch (hopType.getType()) {
+      case IValueMeta.TYPE_STRING:
+        {
+          String val = hopType.getString(hopValue);
+          if (hopValueIsJSON) {
+            Object mongoO = JSON.parse(val);
+            mongoObject.put(lookup.toString(), mongoO);
+          } else {
+            mongoObject.put(lookup.toString(), val);
+          }
+          return true;
+        }
+      case IValueMeta.TYPE_BOOLEAN:
+        {
+          Boolean val = hopType.getBoolean(hopValue);
+          mongoObject.put(lookup.toString(), val);
+          return true;
+        }
+      case IValueMeta.TYPE_INTEGER:
+        {
+          Long val = hopType.getInteger(hopValue);
+          mongoObject.put(lookup.toString(), val.longValue());
+          return true;
+        }
+      case IValueMeta.TYPE_DATE:
+        {
+          Date val = hopType.getDate(hopValue);
+          mongoObject.put(lookup.toString(), val);
+          return true;
+        }
+      case IValueMeta.TYPE_NUMBER:
+        {
+          Double val = hopType.getNumber(hopValue);
+          mongoObject.put(lookup.toString(), val.doubleValue());
+          return true;
+        }
+      case IValueMeta.TYPE_BIGNUMBER:
+        {
+          // use string value - user can use Hop to convert back
+          String val = hopType.getString(hopValue);
+          mongoObject.put(lookup.toString(), val);
+          return true;
+        }
+      case IValueMeta.TYPE_BINARY:
+        {
+          byte[] val = hopType.getBinary(hopValue);
+          mongoObject.put(lookup.toString(), val);
+          return true;
+        }
+      case IValueMeta.TYPE_JSON:
+        {
+          JsonNode node = hopType.getJson(hopValue);
+          Object bson = MongoField.toBsonFromJsonNode(node);
+          mongoObject.put(lookup.toString(), bson);
+          return true;
+        }
+      default:
+        {
+          // UUID
+          try {
+            int uuidTypeId = ValueMetaFactory.getIdForValueMeta("UUID");
+            if (hopType.getType() == uuidTypeId) {
+              UUID val = (UUID) hopType.convertData(hopType, hopValue);
+              mongoObject.put(lookup.toString(), val);
+              return true;
+            }
+          } catch (Exception ignore) {
+            // UUID plugin not present, fall through
+          }
+          if (hopType.isSerializableType()) {
+            throw new HopValueException(
+                BaseMessages.getString(
+                    PKG, "MongoDbOutput.Messages.Error.CantStoreHopSerializableVals")); //
+          }
 
-    return false;
+          return false;
+        }
+    }
   }
 
   private static Object getPathElementName(
       List<String> pathParts, DBObject current, boolean incomingAsFieldName) throws HopException {
 
-    if (pathParts == null || pathParts.isEmpty()) {
+    if (Utils.isEmpty(pathParts)) {
       return null;
     }
 
@@ -940,7 +977,7 @@ public class MongoDbOutputData extends BaseTransformData implements ITransformDa
     if (part.startsWith("[")) { //
       String index = part.substring(1, part.indexOf(']')).trim();
       part = part.substring(part.indexOf(']') + 1).trim();
-      if (part.length() > 0) {
+      if (!part.isEmpty()) {
         // any remaining characters must indicate a multi-dimensional array
         pathParts.set(0, part);
 
@@ -1010,7 +1047,7 @@ public class MongoDbOutputData extends BaseTransformData implements ITransformDa
   protected static MongoTopLevel checkTopLevelConsistency(
       List<MongoDbOutputMeta.MongoField> fieldDefs, IVariables vars) throws HopException {
 
-    if (fieldDefs == null || fieldDefs.isEmpty()) {
+    if (Utils.isEmpty(fieldDefs)) {
       throw new HopException(
           BaseMessages.getString(PKG, "MongoDbOutput.Messages.Error.NoMongoPathsDefined"));
     }

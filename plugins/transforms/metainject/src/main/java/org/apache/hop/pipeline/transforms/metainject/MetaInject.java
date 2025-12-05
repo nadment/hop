@@ -82,7 +82,15 @@ public class MetaInject extends BaseTransform<MetaInjectMeta, MetaInjectData> {
     // Skip the transform from which we stream data. Keep that available for runtime action.
     //
     data.rowMap = new HashMap<>();
-    boolean receivedRows = true;
+    boolean receivedRows = false;
+    boolean hasEmptyList = false;
+
+    // If there are no previous transforms we will set receivedRows to true. This allows execution
+    // using constants only
+    if (getPipelineMeta().getPrevTransformNames(getTransformMeta()).length == 0) {
+      receivedRows = true;
+    }
+
     for (String prevTransformName : getPipelineMeta().getPrevTransformNames(getTransformMeta())) {
       // Don't read from the streaming source transform
       //
@@ -99,14 +107,18 @@ public class MetaInject extends BaseTransform<MetaInjectMeta, MetaInjectData> {
 
           row = getRowFrom(rowSet);
         }
-        if (list.isEmpty()) {
-          receivedRows = false;
-          break;
+        if (!list.isEmpty()) {
+          receivedRows = true;
+          data.rowMap.put(prevTransformName, list);
+        } else {
+          hasEmptyList = true;
         }
-        data.rowMap.put(prevTransformName, list);
       }
     }
-    if (!receivedRows) {
+
+    // Check if all previous transforms are returning data, unless isAllowEmptyStreamOnExecution is
+    // true then execute if at least one branch has data
+    if (!receivedRows || (hasEmptyList && !meta.isAllowEmptyStreamOnExecution())) {
       setOutputDone();
       return false;
     }
@@ -391,47 +403,46 @@ public class MetaInject extends BaseTransform<MetaInjectMeta, MetaInjectData> {
     for (TargetTransformAttribute target : targetMap.keySet()) {
       SourceTransformField source = targetMap.get(target);
 
-      if (target.getTransformName().equalsIgnoreCase(targetTransform)) {
+      if (target.getTransformName().equalsIgnoreCase(targetTransform)
+          && source.getTransformName() != null) {
         // This is the transform to collect data for...
         // We also know which transform to read the data from. (source)
         //
-        if (source.getTransformName() != null) {
-          // from specified transform
-          List<RowMetaAndData> rows = data.rowMap.get(source.getTransformName());
-          if (rows != null && !rows.isEmpty()) {
-            // Which metadata key is this referencing? Find the attribute key in the metadata
-            // entries...
-            //
-            if (injector.hasProperty(targetTransformMeta, target.getAttributeKey())) {
-              // target transform has specified key
-              boolean skip = false;
-              for (RowMetaAndData r : rows) {
-                if (r.getRowMeta().indexOfValue(source.getField()) < 0) {
-                  logError(
-                      BaseMessages.getString(
-                          PKG,
-                          "MetaInject.SourceFieldIsNotDefined.Message",
-                          source.getField(),
-                          getPipelineMeta().getName()));
-                  // source transform doesn't contain specified field
-                  skip = true;
-                }
+        // from specified transform
+        List<RowMetaAndData> rows = data.rowMap.get(source.getTransformName());
+        if (!Utils.isEmpty(rows)) {
+          // Which metadata key is this referencing? Find the attribute key in the metadata
+          // entries...
+          //
+          if (injector.hasProperty(targetTransformMeta, target.getAttributeKey())) {
+            // target transform has specified key
+            boolean skip = false;
+            for (RowMetaAndData r : rows) {
+              if (r.getRowMeta().indexOfValue(source.getField()) < 0) {
+                logError(
+                    BaseMessages.getString(
+                        PKG,
+                        "MetaInject.SourceFieldIsNotDefined.Message",
+                        source.getField(),
+                        getPipelineMeta().getName()));
+                // source transform doesn't contain specified field
+                skip = true;
               }
-              if (!skip) {
-                // specified field exist - need to inject
-                injector.setProperty(
-                    targetTransformMeta, target.getAttributeKey(), rows, source.getField());
-                wasInjection = true;
-              }
-            } else {
-              // target transform doesn't have specified key - just report but don't fail like in
-              logError(
-                  BaseMessages.getString(
-                      PKG,
-                      "MetaInject.TargetKeyIsNotDefined.Message",
-                      target.getAttributeKey(),
-                      getPipelineMeta().getName()));
             }
+            if (!skip) {
+              // specified field exist - need to inject
+              injector.setProperty(
+                  targetTransformMeta, target.getAttributeKey(), rows, source.getField());
+              wasInjection = true;
+            }
+          } else {
+            // target transform doesn't have specified key - just report but don't fail like in
+            logError(
+                BaseMessages.getString(
+                    PKG,
+                    "MetaInject.TargetKeyIsNotDefined.Message",
+                    target.getAttributeKey(),
+                    getPipelineMeta().getName()));
           }
         }
       }
@@ -463,25 +474,24 @@ public class MetaInject extends BaseTransform<MetaInjectMeta, MetaInjectData> {
     for (TargetTransformAttribute target : targetMap.keySet()) {
       SourceTransformField source = targetMap.get(target);
 
-      if (target.getTransformName().equalsIgnoreCase(targetTransform)) {
+      if (target.getTransformName().equalsIgnoreCase(targetTransform)
+          && source.getTransformName() == null) {
         // This is the transform to collect data for...
         // We also know which transform to read the data from. (source)
         //
-        if (source.getTransformName() == null) {
-          // inject constant
-          if (injector.hasProperty(targetTransformMeta, target.getAttributeKey())) {
-            // target transform has specified key
-            String value = variables.resolve(source.getField());
-            injector.setProperty(targetTransformMeta, target.getAttributeKey(), null, value);
-          } else {
-            // target transform doesn't have specified key - just report but don't fail like in 6.0
-            logError(
-                BaseMessages.getString(
-                    PKG,
-                    "MetaInject.TargetKeyIsNotDefined.Message",
-                    target.getAttributeKey(),
-                    getPipelineMeta().getName()));
-          }
+        // inject constant
+        if (injector.hasProperty(targetTransformMeta, target.getAttributeKey())) {
+          // target transform has specified key
+          String value = variables.resolve(source.getField());
+          injector.setProperty(targetTransformMeta, target.getAttributeKey(), null, value);
+        } else {
+          // target transform doesn't have specified key - just report but don't fail like in 6.0
+          logError(
+              BaseMessages.getString(
+                  PKG,
+                  "MetaInject.TargetKeyIsNotDefined.Message",
+                  target.getAttributeKey(),
+                  getPipelineMeta().getName()));
         }
       }
     }
@@ -644,10 +654,9 @@ public class MetaInject extends BaseTransform<MetaInjectMeta, MetaInjectData> {
     Set<String> existedTransformNames = convertToUpperCaseSet(transformNamesArray);
     Set<SourceTransformField> unavailableSourceTransforms = new HashSet<>();
     for (SourceTransformField currentSource : targetMap.values()) {
-      if (currentSource.getTransformName() != null) {
-        if (!existedTransformNames.contains(currentSource.getTransformName().toUpperCase())) {
-          unavailableSourceTransforms.add(currentSource);
-        }
+      if (currentSource.getTransformName() != null
+          && !existedTransformNames.contains(currentSource.getTransformName().toUpperCase())) {
+        unavailableSourceTransforms.add(currentSource);
       }
     }
     return Collections.unmodifiableSet(unavailableSourceTransforms);

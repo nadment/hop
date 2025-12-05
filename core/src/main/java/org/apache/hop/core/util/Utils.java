@@ -17,8 +17,8 @@
 
 package org.apache.hop.core.util;
 
+import java.util.Collection;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.apache.commons.lang3.StringUtils;
@@ -144,13 +144,24 @@ public class Utils {
   }
 
   /**
-   * Check if the list supplied is empty. An array is empty when it is null or when the length is 0
+   * Check if the collection supplied is empty. An array is empty when it is null or when the length
+   * is 0
    *
-   * @param list the list to check
-   * @return true if the supplied list is empty
+   * @param collection the collection to check
+   * @return true if the supplied collection is empty
    */
-  public static boolean isEmpty(List<?> list) {
-    return list == null || list.isEmpty();
+  public static boolean isEmpty(Collection<?> collection) {
+    return collection == null || collection.isEmpty();
+  }
+
+  /**
+   * Check if the map supplied is empty. An array is empty when it is null or when the length is 0
+   *
+   * @param map the map to check
+   * @return true if the supplied map is empty
+   */
+  public static boolean isEmpty(Map<?, ?> map) {
+    return map == null || map.isEmpty();
   }
 
   /**
@@ -293,14 +304,14 @@ public class Utils {
 
   public static String getDurationHMS(double seconds) {
     int day = (int) TimeUnit.SECONDS.toDays((long) seconds);
-    long hours = TimeUnit.SECONDS.toHours((long) seconds) - (day * 24);
+    long hours = TimeUnit.SECONDS.toHours((long) seconds) - (day * 24L);
     long minute =
         TimeUnit.SECONDS.toMinutes((long) seconds)
-            - (TimeUnit.SECONDS.toHours((long) seconds) * 60);
+            - (TimeUnit.SECONDS.toHours((long) seconds) * 60L);
     long second =
         TimeUnit.SECONDS.toSeconds((long) seconds)
-            - (TimeUnit.SECONDS.toMinutes((long) seconds) * 60);
-    long ms = (long) ((seconds - ((long) seconds)) * 1000);
+            - (TimeUnit.SECONDS.toMinutes((long) seconds) * 60L);
+    long ms = Math.round(((seconds - ((long) seconds)) * 1000L));
 
     StringBuilder hms = new StringBuilder();
     if (day > 0) {

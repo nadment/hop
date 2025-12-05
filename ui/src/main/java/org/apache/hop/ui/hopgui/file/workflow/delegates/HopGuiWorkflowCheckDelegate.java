@@ -180,6 +180,10 @@ public class HopGuiWorkflowCheckDelegate {
     try {
       final List<ICheckResult> remarks = new ArrayList<>();
 
+      // Activate folder tab
+      //
+      workflowGraph.extraViewTabFolder.setSelection(workflowCheckTab);
+
       // Run the check in a progress dialog with a monitor...
       //
       ProgressMonitorDialog monitorDialog = new ProgressMonitorDialog(hopGui.getShell());
@@ -271,11 +275,10 @@ public class HopGuiWorkflowCheckDelegate {
 
   /** Edit check result source */
   private void edit(Event event) {
-    if (event.item instanceof TreeItem item) {
-      if (item.getData() instanceof ICheckResultSource source) {
-        ActionMeta actionMeta = workflowGraph.getWorkflowMeta().findAction(source.getName());
-        workflowGraph.editAction(actionMeta);
-      }
+    if (event.item instanceof TreeItem item
+        && item.getData() instanceof ICheckResultSource source) {
+      ActionMeta actionMeta = workflowGraph.getWorkflowMeta().findAction(source.getName());
+      workflowGraph.editAction(actionMeta);
     }
   }
 }

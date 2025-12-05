@@ -192,7 +192,7 @@ public class Repeat extends ActionBase implements IAction, Cloneable {
       repetitionNr++;
       executionResult = executePipelineOrWorkflow(realFilename, nr, executionResult, repetitionNr);
       Result result = executionResult.result;
-      if (!result.getResult() || result.getNrErrors() > 0 || result.isStopped()) {
+      if (!result.isResult() || result.getNrErrors() > 0 || result.isStopped()) {
         logError("The repeating work encountered and error or was stopped. This ends the loop.");
 
         // On an false result, stop the loop
@@ -387,11 +387,7 @@ public class Repeat extends ActionBase implements IAction, Cloneable {
     updateParameters(workflow, previousVars, getParentWorkflow(), previousParams);
 
     workflow.setLogLevel(getLogLevel());
-
-    if (parentWorkflow.isInteractive()) {
-      workflow.setInteractive(true);
-      workflow.getActionListeners().addAll(parentWorkflow.getActionListeners());
-    }
+    workflow.getActionListeners().addAll(parentWorkflow.getActionListeners());
 
     // Link the workflow with the sub-workflow
     parentWorkflow.getWorkflowTracker().addWorkflowTracker(workflow.getWorkflowTracker());

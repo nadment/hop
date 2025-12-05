@@ -123,12 +123,11 @@ public class PipelineExecutor extends BaseTransform<PipelineExecutorMeta, Pipeli
       if (pipelineExecutorData.groupSize < 0) {
         if (pipelineExecutorData.groupFieldIndex >= 0) { // grouping by field
           Object groupFieldData = row[pipelineExecutorData.groupFieldIndex];
-          if (pipelineExecutorData.prevGroupFieldData != null) {
-            if (pipelineExecutorData.groupFieldMeta.compare(
-                    pipelineExecutorData.prevGroupFieldData, groupFieldData)
-                != 0) {
-              executePipeline(getLastIncomingFieldValues());
-            }
+          if (pipelineExecutorData.prevGroupFieldData != null
+              && pipelineExecutorData.groupFieldMeta.compare(
+                      pipelineExecutorData.prevGroupFieldData, groupFieldData)
+                  != 0) {
+            executePipeline(getLastIncomingFieldValues());
           }
           pipelineExecutorData.prevGroupFieldData = groupFieldData;
         } else if (pipelineExecutorData.groupTime > 0) { // grouping by execution time
@@ -146,10 +145,9 @@ public class PipelineExecutor extends BaseTransform<PipelineExecutorMeta, Pipeli
 
       // Grouping by size.
       // If group buffer size exceeds specified limit, then execute pipeline and flush group buffer.
-      if (pipelineExecutorData.groupSize > 0) {
-        if (pipelineExecutorData.groupBuffer.size() >= pipelineExecutorData.groupSize) {
-          executePipeline(incomingFieldValues);
-        }
+      if (pipelineExecutorData.groupSize > 0
+          && pipelineExecutorData.groupBuffer.size() >= pipelineExecutorData.groupSize) {
+        executePipeline(incomingFieldValues);
       }
 
       return true;
@@ -217,7 +215,7 @@ public class PipelineExecutor extends BaseTransform<PipelineExecutorMeta, Pipeli
 
     PipelineExecutorData pipelineExecutorData = getData();
     // If we got 0 rows on input we don't really want to execute the pipeline
-    if (pipelineExecutorData.groupBuffer == null || pipelineExecutorData.groupBuffer.isEmpty()) {
+    if (Utils.isEmpty(pipelineExecutorData.groupBuffer)) {
       return;
     }
     pipelineExecutorData.groupTimeStart = System.currentTimeMillis();
@@ -237,9 +235,7 @@ public class PipelineExecutor extends BaseTransform<PipelineExecutorMeta, Pipeli
       // exists
       // If not still pass the null parameter values
       passParametersToPipeline(
-          lastIncomingFieldValues != null && !lastIncomingFieldValues.isEmpty()
-              ? lastIncomingFieldValues
-              : incomingFieldValues);
+          !Utils.isEmpty(lastIncomingFieldValues) ? lastIncomingFieldValues : incomingFieldValues);
     }
 
     // keep track for drill down in HopGui...
@@ -300,7 +296,7 @@ public class PipelineExecutor extends BaseTransform<PipelineExecutorMeta, Pipeli
   }
 
   @VisibleForTesting
-  void passParametersToPipeline(List<String> incomingFieldValues) throws HopException {
+  void passParametersToPipeline(List<String> incomingFieldValues) {
     // The values of the incoming fields from the previous transform.
     if (incomingFieldValues == null) {
       incomingFieldValues = new ArrayList<>();
@@ -328,12 +324,10 @@ public class PipelineExecutor extends BaseTransform<PipelineExecutorMeta, Pipeli
       incomingFields = Arrays.asList(data.getInputRowMeta().getFieldNames());
     }
 
-    /////////////////////////////////////////////
     // For all parameters declared in pipelineExecutor
     for (int i = 0; i < parameters.size(); i++) {
       String currentVariableToUpdate = (String) resolvingValuesMap.keySet().toArray()[i];
-      boolean hasIncomingFieldValues =
-          incomingFieldValues != null && !incomingFieldValues.isEmpty();
+      boolean hasIncomingFieldValues = !Utils.isEmpty(incomingFieldValues);
       try {
         if (i < fieldsToUse.size()
             && incomingFields.contains(fieldsToUse.get(i))
@@ -388,7 +382,6 @@ public class PipelineExecutor extends BaseTransform<PipelineExecutorMeta, Pipeli
             resolvingValuesMap.get(parameters.get(i).getVariable()));
       }
     }
-    /////////////////////////////////////////////
 
     // Transform the values of the resolvingValuesMap into a String array "inputFieldValues" to be
     // passed as parameter..
@@ -430,7 +423,7 @@ public class PipelineExecutor extends BaseTransform<PipelineExecutorMeta, Pipeli
         outputRow[idx++] = Long.valueOf(System.currentTimeMillis() - getData().groupTimeStart);
       }
       if (!Utils.isEmpty(meta.getExecutionResultField())) {
-        outputRow[idx++] = Boolean.valueOf(result.getResult());
+        outputRow[idx++] = Boolean.valueOf(result.isResult());
       }
       if (!Utils.isEmpty(meta.getExecutionNrErrorsField())) {
         outputRow[idx++] = Long.valueOf(result.getNrErrors());

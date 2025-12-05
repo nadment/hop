@@ -84,10 +84,8 @@ public class DynamicSqlRow extends BaseTransform<DynamicSqlRowMeta, DynamicSqlRo
     }
 
     if (meta.isQueryOnlyOnChange()) {
-      if (loadFromBuffer) {
-        if (data.previousSql != null && !data.previousSql.equals(sql)) {
-          loadFromBuffer = false;
-        }
+      if (loadFromBuffer && data.previousSql != null && !data.previousSql.equals(sql)) {
+        loadFromBuffer = false;
       }
       // Save current parameters value as previous ones
       data.previousSql = sql;
@@ -145,7 +143,7 @@ public class DynamicSqlRow extends BaseTransform<DynamicSqlRowMeta, DynamicSqlRo
               data.outputRowMeta.getValueMeta(getInputRowMeta().size() + i);
 
           if (templateValueMeta.getType() != outputValueMeta.getType()) {
-            if (typeErrors.length() > 0) {
+            if (!typeErrors.isEmpty()) {
               typeErrors.append(Const.CR);
             }
             typeErrors.append(
@@ -156,7 +154,7 @@ public class DynamicSqlRow extends BaseTransform<DynamicSqlRowMeta, DynamicSqlRo
                     outputValueMeta.toString()));
           }
         }
-        if (typeErrors.length() > 0) {
+        if (!typeErrors.isEmpty()) {
           throw new HopException(typeErrors.toString());
         }
       }

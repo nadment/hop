@@ -20,6 +20,7 @@ package org.apache.hop.ui.hopgui.file.delegates;
 import java.util.List;
 import org.apache.hop.base.AbstractMeta;
 import org.apache.hop.core.NotePadMeta;
+import org.apache.hop.core.util.Utils;
 import org.apache.hop.core.variables.IVariables;
 import org.apache.hop.i18n.BaseMessages;
 import org.apache.hop.ui.core.ConstUi;
@@ -42,7 +43,7 @@ public class HopGuiNotePadDelegate {
   }
 
   public void deleteNotes(AbstractMeta meta, List<NotePadMeta> notes) {
-    if (notes == null || notes.isEmpty()) {
+    if (Utils.isEmpty(notes)) {
       return; // Nothing to do
     }
     int[] idxs = new int[notes.size()];
@@ -51,7 +52,8 @@ public class HopGuiNotePadDelegate {
       idxs[i] = meta.indexOfNote(notes.get(i));
       noteCopies[i] = new NotePadMeta(notes.get(i));
     }
-    for (int idx : idxs) {
+    for (NotePadMeta notePadMeta : notes) {
+      int idx = meta.indexOfNote(notePadMeta);
       meta.removeNote(idx);
     }
     hopGui.undoDelegate.addUndoDelete(meta, noteCopies, idxs);
@@ -70,32 +72,32 @@ public class HopGuiNotePadDelegate {
 
   public void newNote(IVariables variables, AbstractMeta meta, int x, int y) {
     String title = BaseMessages.getString(PKG, "PipelineGraph.Dialog.NoteEditor.Title");
-    NotePadDialog dd = new NotePadDialog(variables, hopGui.getShell(), title);
-    NotePadMeta n = dd.open();
-    if (n != null) {
-      NotePadMeta npi =
+    NotePadDialog dialog = new NotePadDialog(variables, hopGui.getShell(), title);
+    NotePadMeta note = dialog.open();
+    if (note != null) {
+      NotePadMeta newNote =
           new NotePadMeta(
-              n.getNote(),
+              note.getNote(),
               x,
               y,
               ConstUi.NOTE_MIN_SIZE,
               ConstUi.NOTE_MIN_SIZE,
-              n.getFontName(),
-              n.getFontSize(),
-              n.isFontBold(),
-              n.isFontItalic(),
-              n.getFontColorRed(),
-              n.getFontColorGreen(),
-              n.getFontColorBlue(),
-              n.getBackGroundColorRed(),
-              n.getBackGroundColorGreen(),
-              n.getBackGroundColorBlue(),
-              n.getBorderColorRed(),
-              n.getBorderColorGreen(),
-              n.getBorderColorBlue());
-      meta.addNote(npi);
+              note.getFontName(),
+              note.getFontSize(),
+              note.isFontBold(),
+              note.isFontItalic(),
+              note.getFontColorRed(),
+              note.getFontColorGreen(),
+              note.getFontColorBlue(),
+              note.getBackGroundColorRed(),
+              note.getBackGroundColorGreen(),
+              note.getBackGroundColorBlue(),
+              note.getBorderColorRed(),
+              note.getBorderColorGreen(),
+              note.getBorderColorBlue());
+      meta.addNote(newNote);
       hopGui.undoDelegate.addUndoNew(
-          meta, new NotePadMeta[] {npi}, new int[] {meta.indexOfNote(npi)});
+          meta, new NotePadMeta[] {newNote}, new int[] {meta.indexOfNote(newNote)});
       handler.updateGui();
     }
   }

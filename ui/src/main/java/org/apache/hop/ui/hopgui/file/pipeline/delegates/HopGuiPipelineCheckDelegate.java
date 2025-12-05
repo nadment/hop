@@ -179,6 +179,10 @@ public class HopGuiPipelineCheckDelegate {
     try {
       final List<ICheckResult> remarks = new ArrayList<>();
 
+      // Activate folder tab
+      //
+      pipelineGraph.extraViewTabFolder.setSelection(pipelineCheckTab);
+
       PipelineMeta pipelineMeta = pipelineGraph.getPipelineMeta();
 
       // Run the check in a progress dialog with a monitor...
@@ -296,12 +300,10 @@ public class HopGuiPipelineCheckDelegate {
 
   /** Edit check result source */
   private void edit(Event event) {
-    if (event.item instanceof TreeItem item) {
-      if (item.getData() instanceof ICheckResultSource source) {
-        TransformMeta transformMeta =
-            pipelineGraph.getPipelineMeta().findTransform(source.getName());
-        pipelineGraph.editTransform(pipelineGraph.getPipelineMeta(), transformMeta);
-      }
+    if (event.item instanceof TreeItem item
+        && item.getData() instanceof ICheckResultSource source) {
+      TransformMeta transformMeta = pipelineGraph.getPipelineMeta().findTransform(source.getName());
+      pipelineGraph.editTransform(pipelineGraph.getPipelineMeta(), transformMeta);
     }
   }
 }

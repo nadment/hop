@@ -61,9 +61,7 @@ public class CustomSocketFactory extends SSLSocketFactory {
     try {
       ctx = SSLContext.getInstance("TLS");
       ctx.init(null, trustManagers, null);
-    } catch (KeyManagementException e) {
-      throw new RuntimeException(e);
-    } catch (NoSuchAlgorithmException e) {
+    } catch (KeyManagementException | NoSuchAlgorithmException e) {
       throw new RuntimeException(e);
     }
     return new CustomSocketFactory(ctx.getSocketFactory());
@@ -80,7 +78,7 @@ public class CustomSocketFactory extends SSLSocketFactory {
       if (!Utils.isEmpty(path) && path.endsWith(".p12")) {
         keyStore = KeyStore.getInstance("PKCS12");
       } else {
-        keyStore = KeyStore.getInstance("JKS");
+        keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
       }
     } catch (Exception e) {
       throw new HopException(

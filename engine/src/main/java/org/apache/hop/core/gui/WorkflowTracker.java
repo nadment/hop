@@ -22,6 +22,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import lombok.Getter;
+import lombok.Setter;
 import org.apache.hop.core.Const;
 import org.apache.hop.core.util.EnvUtil;
 import org.apache.hop.workflow.ActionResult;
@@ -29,6 +31,8 @@ import org.apache.hop.workflow.WorkflowMeta;
 import org.apache.hop.workflow.action.ActionMeta;
 
 /** Responsible for tracking the execution of a workflow as a hierarchy. */
+@Getter
+@Setter
 public class WorkflowTracker<T extends WorkflowMeta> {
   /**
    * The trackers for each individual action. Since we invoke LinkedList.removeFirst() there is no
@@ -207,20 +211,6 @@ public class WorkflowTracker<T extends WorkflowMeta> {
     return null;
   }
 
-  /**
-   * @return Returns the parentWorkflowTracker.
-   */
-  public WorkflowTracker getParentWorkflowTracker() {
-    return parentWorkflowTracker;
-  }
-
-  /**
-   * @param parentWorkflowTracker The parentWorkflowTracker to set.
-   */
-  public void setParentWorkflowTracker(WorkflowTracker parentWorkflowTracker) {
-    this.parentWorkflowTracker = parentWorkflowTracker;
-  }
-
   public int getTotalNumberOfItems() {
     lock.readLock().lock();
     try {
@@ -234,47 +224,5 @@ public class WorkflowTracker<T extends WorkflowMeta> {
     } finally {
       lock.readLock().unlock();
     }
-  }
-
-  /**
-   * @return the workflowFilename
-   */
-  public String getWorfkflowFilename() {
-    return workflowFilename;
-  }
-
-  /**
-   * @param workflowFilename the workflowFilename to set
-   */
-  public void setWorkflowFilename(String workflowFilename) {
-    this.workflowFilename = workflowFilename;
-  }
-
-  /**
-   * @return the workflowName
-   */
-  public String getWorkflowName() {
-    return workflowName;
-  }
-
-  /**
-   * @param workflowName the workflowName to set
-   */
-  public void setWorkflowName(String workflowName) {
-    this.workflowName = workflowName;
-  }
-
-  /**
-   * @return the maxChildren
-   */
-  public int getMaxChildren() {
-    return maxChildren;
-  }
-
-  /**
-   * @param maxChildren the maxChildren to set
-   */
-  public void setMaxChildren(int maxChildren) {
-    this.maxChildren = maxChildren;
   }
 }

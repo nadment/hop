@@ -274,9 +274,9 @@ public class ActionSqlDialog extends ActionDialog {
     wSql =
         EnvironmentUtils.getInstance().isWeb()
             ? new StyledTextComp(
-                action, shell, SWT.MULTI | SWT.LEFT | SWT.BORDER | SWT.H_SCROLL | SWT.V_SCROLL)
+                variables, shell, SWT.MULTI | SWT.LEFT | SWT.BORDER | SWT.H_SCROLL | SWT.V_SCROLL)
             : new SQLStyledTextComp(
-                action, shell, SWT.MULTI | SWT.LEFT | SWT.BORDER | SWT.H_SCROLL | SWT.V_SCROLL);
+                variables, shell, SWT.MULTI | SWT.LEFT | SWT.BORDER | SWT.H_SCROLL | SWT.V_SCROLL);
     wSql.addLineStyleListener(getSqlReservedWords());
     PropsUi.setLook(wSql, Props.WIDGET_STYLE_FIXED);
     FormData fdSql = new FormData();
@@ -304,7 +304,7 @@ public class ActionSqlDialog extends ActionDialog {
 
   private List<String> getSqlReservedWords() {
     // Do not search keywords when connection is empty
-    if (wConnection.getText() == null || wConnection.getText().isEmpty()) {
+    if (Utils.isEmpty(wConnection.getText())) {
       return List.of();
     }
 

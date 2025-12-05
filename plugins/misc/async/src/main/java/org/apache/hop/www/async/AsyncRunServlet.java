@@ -17,19 +17,22 @@
 
 package org.apache.hop.www.async;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hop.core.Const;
 import org.apache.hop.core.annotations.HopServerServlet;
@@ -190,6 +193,24 @@ public class AsyncRunServlet extends BaseHttpServlet implements IHopServerPlugin
           }
         }
         workflow.setVariable(contentVariable, Const.NVL(content, ""));
+
+        String headerContentVariable = variables.resolve(webService.getHeaderContentVariable());
+        String headerContent = "";
+        if (StringUtils.isNotEmpty(headerContentVariable)) {
+          // Create JSON object containing all request headers
+          ObjectMapper objectMapper = new ObjectMapper();
+          ObjectNode headersJson = objectMapper.createObjectNode();
+
+          Enumeration<String> headerNames = request.getHeaderNames();
+          while (headerNames.hasMoreElements()) {
+            String headerName = headerNames.nextElement();
+            String headerValue = request.getHeader(headerName);
+            headersJson.put(headerName, headerValue);
+          }
+          headerContent = objectMapper.writeValueAsString(headersJson);
+        }
+
+        workflow.setVariable(headerContentVariable, headerContent);
       }
 
       // Set all the other parameters as variables/parameters...

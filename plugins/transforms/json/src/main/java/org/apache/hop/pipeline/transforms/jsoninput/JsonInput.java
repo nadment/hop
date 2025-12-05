@@ -17,6 +17,8 @@
 
 package org.apache.hop.pipeline.transforms.jsoninput;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -55,7 +57,13 @@ public class JsonInput extends BaseFileInputTransform<JsonInputMeta, JsonInputDa
 
   private RowOutputConverter rowOutputConverter;
 
-  private static final byte[] EMPTY_JSON = "{}".getBytes(); // for replacing null inputs
+  /** for replacing null inputs */
+  private static final byte[] EMPTY_JSON = "{}".getBytes();
+
+  /** for replacing null inputs when input value is JsonNode */
+  private static final JsonNode EMPTY_OBJECT_NODE = JsonNodeFactory.instance.objectNode();
+
+  private boolean isProcessingJson;
 
   public JsonInput(
       TransformMeta transformMeta,
@@ -197,7 +205,25 @@ public class JsonInput extends BaseFileInputTransform<JsonInputMeta, JsonInputDa
 
     // Create convert meta-data objects that will contain Date & Number formatters
     data.convertRowMeta = data.outputRowMeta.cloneToType(IValueMeta.TYPE_STRING);
-    data.inputs = new InputsReader(this, meta, data, new InputErrorHandler()).iterator();
+
+    // behave differently if the incoming value is JsonNode or String
+    if (data.inputRowMeta != null
+        && data.inputRowMeta.getValueMeta(data.indexSourceField) != null
+        && data.inputRowMeta.getValueMeta(data.indexSourceField).isJson()) {
+      // JsonNode
+      //
+      data.jsonInputs =
+          new InputsReader(this, meta, data, new InputErrorHandler()).jsonFieldIterator();
+      data.inputs = null;
+      isProcessingJson = true;
+    } else {
+      // String
+      //
+      data.inputs = new InputsReader(this, meta, data, new InputErrorHandler()).iterator();
+      data.jsonInputs = null;
+      isProcessingJson = false;
+    }
+
     data.readerRowSet = new QueueRowSet();
     data.readerRowSet.setDone();
     this.rowOutputConverter = new RowOutputConverter(getLogChannel());
@@ -257,7 +283,7 @@ public class JsonInput extends BaseFileInputTransform<JsonInputMeta, JsonInputDa
 
   private void parseNextInputToRowSet(InputStream input) throws HopException {
     try {
-      data.readerRowSet = data.reader.parse(input);
+      data.readerRowSet = data.reader.parseStringValue(input);
     } catch (HopException ke) {
       logInputError(ke);
       throw new JsonInputException(ke);
@@ -266,6 +292,15 @@ public class JsonInput extends BaseFileInputTransform<JsonInputMeta, JsonInputDa
       throw new JsonInputException(e);
     } finally {
       closeQuietly(input);
+    }
+  }
+
+  private void parseNextJsonToRowSet(JsonNode node) throws HopException {
+    try {
+      data.readerRowSet = data.reader.parseJsonNodeValue(node);
+    } catch (Exception e) {
+      logInputError(e);
+      throw new JsonInputException(e);
     }
   }
 
@@ -329,25 +364,48 @@ public class JsonInput extends BaseFileInputTransform<JsonInputMeta, JsonInputDa
       return null;
     }
     Object[] rawReaderRow = null;
-    while ((rawReaderRow = data.readerRowSet.getRow()) == null) {
-      if (data.inputs.hasNext() && data.readerRowSet.isDone()) {
-        try (InputStream nextIn = data.inputs.next()) {
 
-          if (nextIn != null) {
-            parseNextInputToRowSet(nextIn);
+    if (isProcessingJson) {
+      // If the incoming field is a JsonNode, don't do conversion,
+      // just get the value at the path specified by the user
+      while ((rawReaderRow = data.readerRowSet.getRow()) == null) {
+        if (data.jsonInputs.hasNext() && data.readerRowSet.isDone()) {
+          JsonNode nextNode = data.jsonInputs.next();
+
+          if (nextNode != null) {
+            parseNextJsonToRowSet(nextNode);
           } else {
-            parseNextInputToRowSet(new ByteArrayInputStream(EMPTY_JSON));
+            parseNextJsonToRowSet(EMPTY_OBJECT_NODE);
           }
 
-        } catch (IOException e) {
-          logError(BaseMessages.getString(PKG, "JsonInput.Log.UnexpectedError", e.toString()), e);
-          incrementErrors();
+        } else {
+          if (isDetailed()) {
+            logDetailed(BaseMessages.getString(PKG, "JsonInput.Log.FinishedProcessing"));
+          }
+          return null;
         }
-      } else {
-        if (isDetailed()) {
-          logDetailed(BaseMessages.getString(PKG, "JsonInput.Log.FinishedProcessing"));
+      }
+    } else {
+      while ((rawReaderRow = data.readerRowSet.getRow()) == null) {
+        if (data.inputs.hasNext() && data.readerRowSet.isDone()) {
+          try (InputStream nextIn = data.inputs.next()) {
+
+            if (nextIn != null) {
+              parseNextInputToRowSet(nextIn);
+            } else {
+              parseNextInputToRowSet(new ByteArrayInputStream(EMPTY_JSON));
+            }
+
+          } catch (IOException e) {
+            logError(BaseMessages.getString(PKG, "JsonInput.Log.UnexpectedError", e.toString()), e);
+            incrementErrors();
+          }
+        } else {
+          if (isDetailed()) {
+            logDetailed(BaseMessages.getString(PKG, "JsonInput.Log.FinishedProcessing"));
+          }
+          return null;
         }
-        return null;
       }
     }
     Object[] outputRow = rowOutputConverter.getRow(buildBaseOutputRow(), rawReaderRow, data);
@@ -411,36 +469,36 @@ public class JsonInput extends BaseFileInputTransform<JsonInputMeta, JsonInputDa
       outputRowData[rowIndex++] = Long.valueOf(data.rownr);
     }
     // Possibly add short filename...
-    if (meta.getShortFileNameField() != null && meta.getShortFileNameField().length() > 0) {
+    if (!Utils.isEmpty(meta.getShortFileNameField())) {
       outputRowData[rowIndex++] = data.shortFilename;
     }
     // Add Extension
-    if (meta.getExtensionField() != null && meta.getExtensionField().length() > 0) {
+    if (!Utils.isEmpty(meta.getExtensionField())) {
       outputRowData[rowIndex++] = data.extension;
     }
     // add path
-    if (meta.getPathField() != null && meta.getPathField().length() > 0) {
+    if (!Utils.isEmpty(meta.getPathField())) {
       outputRowData[rowIndex++] = data.path;
     }
     // Add Size
-    if (meta.getSizeField() != null && meta.getSizeField().length() > 0) {
+    if (!Utils.isEmpty(meta.getSizeField())) {
       outputRowData[rowIndex++] = data.size;
     }
     // add Hidden
-    if (meta.isHiddenField() != null && meta.isHiddenField().length() > 0) {
+    if (!Utils.isEmpty(meta.isHiddenField())) {
       outputRowData[rowIndex++] = Boolean.valueOf(data.path);
     }
     // Add modification date
     if (meta.getLastModificationDateField() != null
-        && meta.getLastModificationDateField().length() > 0) {
+        && !meta.getLastModificationDateField().isEmpty()) {
       outputRowData[rowIndex++] = data.lastModificationDateTime;
     }
     // Add Uri
-    if (meta.getUriField() != null && meta.getUriField().length() > 0) {
+    if (!Utils.isEmpty(meta.getUriField())) {
       outputRowData[rowIndex++] = data.uriName;
     }
     // Add RootUri
-    if (meta.getRootUriField() != null && meta.getRootUriField().length() > 0) {
+    if (!Utils.isEmpty(meta.getRootUriField())) {
       outputRowData[rowIndex++] = data.rootUriName;
     }
   }

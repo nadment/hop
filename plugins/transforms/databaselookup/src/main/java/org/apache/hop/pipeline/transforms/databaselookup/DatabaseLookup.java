@@ -115,24 +115,23 @@ public class DatabaseLookup extends BaseTransform<DatabaseLookupMeta, DatabaseLo
       add = null;
     }
 
-    if (add == null) {
-      if (!(meta.isCached() && meta.isLoadingAllDataInCache())
-          || data.hasDBCondition) { // do not go to the
-        // database when all rows
-        // are in (exception LIKE
-        // operator)
-        if (isRowLevel()) {
-          logRowlevel(
-              BaseMessages.getString(PKG, "DatabaseLookup.Log.AddedValuesToLookupRow1")
-                  + meta.getLookup().getKeyFields().size()
-                  + BaseMessages.getString(PKG, "DatabaseLookup.Log.AddedValuesToLookupRow2")
-                  + data.lookupMeta.getString(lookupRow));
-        }
-
-        data.db.setValuesLookup(data.lookupMeta, lookupRow);
-        add = data.db.getLookup(meta.getLookup().isFailingOnMultipleResults());
-        cacheNow = true;
+    if (add == null
+        && (!(meta.isCached() && meta.isLoadingAllDataInCache()) || data.hasDBCondition)) {
+      // do not go to the
+      // database when all rows
+      // are in (exception LIKE
+      // operator)
+      if (isRowLevel()) {
+        logRowlevel(
+            BaseMessages.getString(PKG, "DatabaseLookup.Log.AddedValuesToLookupRow1")
+                + meta.getLookup().getKeyFields().size()
+                + BaseMessages.getString(PKG, "DatabaseLookup.Log.AddedValuesToLookupRow2")
+                + data.lookupMeta.getString(lookupRow));
       }
+
+      data.db.setValuesLookup(data.lookupMeta, lookupRow);
+      add = data.db.getLookup(meta.getLookup().isFailingOnMultipleResults());
+      cacheNow = true;
     }
 
     if (add == null) { // nothing was found, unknown code: add default values
@@ -518,7 +517,7 @@ public class DatabaseLookup extends BaseTransform<DatabaseLookupMeta, DatabaseLo
       // Now that we have the SQL constructed, let's store the rows...
       //
       List<Object[]> rows = db.getRows(sql, 0);
-      if (rows != null && !rows.isEmpty()) {
+      if (!Utils.isEmpty(rows)) {
         if (data.allEquals) {
           putToDefaultCache(db, rows);
         } else {

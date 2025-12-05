@@ -91,12 +91,10 @@ public class XmlOutput extends BaseTransform<XmlOutputMeta, XmlOutputData> {
       closeFile();
 
       // Not finished: open another file...
-      if (r != null) {
-        if (!openNewFile()) {
-          logError("Unable to open new file (split #" + data.splitnr + "...");
-          setErrors(1);
-          return false;
-        }
+      if (r != null && !openNewFile()) {
+        logError("Unable to open new file (split #" + data.splitnr + "...");
+        setErrors(1);
+        return false;
       }
     }
 
@@ -289,7 +287,7 @@ public class XmlOutput extends BaseTransform<XmlOutputMeta, XmlOutputData> {
       } else {
         outputStream = HopVfs.getOutputStream(file, false);
       }
-      if (meta.getEncoding() != null && meta.getEncoding().length() > 0) {
+      if (!Utils.isEmpty(meta.getEncoding())) {
         logBasic("Opening output stream in encoding: " + meta.getEncoding());
         data.writer = XML_OUT_FACTORY.createXMLStreamWriter(outputStream, meta.getEncoding());
         data.writer.writeStartDocument(meta.getEncoding(), "1.0");

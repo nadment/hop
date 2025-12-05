@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import lombok.Getter;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.vfs2.FileObject;
 import org.apache.hop.core.RowMetaAndData;
@@ -61,12 +62,16 @@ public class HopGuiFileDelegate {
   public static final String CONST_ERROR = "Error";
   private final HopGui hopGui;
 
+  /** Returns a boolean indicating whether the gui in the process of closing files. */
+  @Getter private boolean isClosing;
+
   public HopGuiFileDelegate(HopGui hopGui) {
     this.hopGui = hopGui;
+    this.isClosing = false;
   }
 
   public IHopFileTypeHandler getActiveFileTypeHandler() {
-    return hopGui.getActivePerspective().getActiveFileTypeHandler();
+    return hopGui.getActiveFileTypeHandler();
   }
 
   public void fileOpen() {
@@ -92,8 +97,13 @@ public class HopGuiFileDelegate {
   }
 
   public IHopFileTypeHandler fileOpen(String filename) throws Exception {
-    HopFileTypeRegistry fileRegistry = HopFileTypeRegistry.getInstance();
+    return fileOpen(filename, true);
+  }
 
+  public IHopFileTypeHandler fileOpen(String filename, boolean activatePerspective)
+      throws Exception {
+
+    HopFileTypeRegistry fileRegistry = HopFileTypeRegistry.getInstance();
     IHopFileType hopFile = fileRegistry.findHopFileType(filename);
     if (hopFile == null) {
       throw new HopException(
@@ -115,6 +125,15 @@ public class HopGuiFileDelegate {
       // Also save the state of Hop GUI
       //
       hopGui.auditDelegate.writeLastOpenFiles();
+
+      // Switch to the perspective
+      //
+      if (activatePerspective) {
+        IHopPerspective perspective = hopGui.getPerspectiveManager().findPerspective(hopFile);
+        if (perspective != null) {
+          perspective.activate();
+        }
+      }
     }
 
     return fileTypeHandler;
@@ -196,7 +215,7 @@ public class HopGuiFileDelegate {
       IHopFileTypeHandler typeHandler = getActiveFileTypeHandler();
       IHopFileType fileType = typeHandler.getFileType();
       if (fileType.hasCapability(IHopFileType.CAPABILITY_CLOSE)) {
-        perspective.remove(typeHandler);
+        return perspective.remove(typeHandler);
       }
     } catch (Exception e) {
       new ErrorDialog(hopGui.getActiveShell(), CONST_ERROR, "Error saving/closing file", e);
@@ -225,6 +244,7 @@ public class HopGuiFileDelegate {
   }
 
   public void closeAllFiles() {
+    this.isClosing = true;
     for (IHopPerspective perspective : hopGui.getPerspectiveManager().getPerspectives()) {
       List<TabItemHandler> tabItemHandlers = perspective.getItems();
       if (tabItemHandlers != null) {
@@ -237,6 +257,7 @@ public class HopGuiFileDelegate {
         }
       }
     }
+    this.isClosing = false;
   }
 
   /** When the app exits we need to see if all open files are saved in all perspectives... */
@@ -285,7 +306,7 @@ public class HopGuiFileDelegate {
       RowMetaAndData row = rowDialog.open();
       if (row != null) {
         String filename = row.getString("filename", null);
-        hopGui.fileDelegate.fileOpen(filename);
+        fileOpen(filename);
       }
     } catch (Exception e) {
       new ErrorDialog(

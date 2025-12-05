@@ -43,6 +43,7 @@ import org.apache.hop.core.gui.plugin.toolbar.GuiToolbarElement;
 import org.apache.hop.core.logging.LogChannel;
 import org.apache.hop.core.plugins.IPlugin;
 import org.apache.hop.core.plugins.PluginRegistry;
+import org.apache.hop.core.util.Utils;
 import org.apache.hop.core.variables.IVariables;
 import org.apache.hop.core.vfs.HopVfs;
 import org.apache.hop.history.AuditList;
@@ -305,9 +306,7 @@ public class HopVfsFileDialog implements IFileDialog, IDirectoryDialog {
     BaseTransformDialog.positionBottomButtons(
         shell, new Button[] {wOk, wCancel}, PropsUi.getMargin(), null);
 
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////
     // On top there are the navigation
-    //
     Composite navigateComposite = new Composite(shell, SWT.NONE);
     PropsUi.setLook(navigateComposite);
     GridLayout gridLayout = new GridLayout((browsingDirectories) ? 2 : 3, false);
@@ -322,7 +321,6 @@ public class HopVfsFileDialog implements IFileDialog, IDirectoryDialog {
     navigateComposite.setLayoutData(fdNavigationForm);
 
     // A toolbar above the browser, below the filename
-    //
     ToolBar navigateToolBar = new ToolBar(navigateComposite, SWT.LEFT | SWT.HORIZONTAL);
     navigateToolBar.setLayoutData(new GridData(SWT.LEFT, SWT.FILL, false, true));
     PropsUi.setLook(navigateToolBar, Props.WIDGET_STYLE_DEFAULT);
@@ -347,7 +345,6 @@ public class HopVfsFileDialog implements IFileDialog, IDirectoryDialog {
     }
 
     // Above this we have a sash form
-    //
     SashForm sashForm = new SashForm(shell, SWT.HORIZONTAL);
     FormData fdSashForm = new FormData();
     fdSashForm.left = new FormAttachment(0, 0);
@@ -359,15 +356,12 @@ public class HopVfsFileDialog implements IFileDialog, IDirectoryDialog {
 
     PropsUi.setLook(sashForm);
 
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////
     // On the left there are the bookmarks
-    //
     Composite bookmarksComposite = new Composite(sashForm, SWT.BORDER);
     PropsUi.setLook(bookmarksComposite);
     bookmarksComposite.setLayout(new FormLayout());
 
     // Above the bookmarks a toolbar with add, delete
-    //
     ToolBar bookmarksToolBar =
         new ToolBar(bookmarksComposite, SWT.WRAP | SWT.SHADOW_IN | SWT.LEFT | SWT.HORIZONTAL);
     FormData fdBookmarksToolBar = new FormData();
@@ -383,7 +377,6 @@ public class HopVfsFileDialog implements IFileDialog, IDirectoryDialog {
     bookmarksToolBar.pack();
 
     // Below that we have a list with all the bookmarks in them
-    //
     wBookmarks = new List(bookmarksComposite, SWT.SINGLE | SWT.LEFT | SWT.V_SCROLL | SWT.H_SCROLL);
     PropsUi.setLook(wBookmarks);
     FormData fdBookmarks = new FormData();
@@ -396,7 +389,6 @@ public class HopVfsFileDialog implements IFileDialog, IDirectoryDialog {
     wBookmarks.addListener(SWT.DefaultSelection, this::bookmarkDefaultSelection);
 
     // Context menu for bookmarks
-    //
     final Menu menu = new Menu(wBookmarks);
     menu.addMenuListener(
         new MenuAdapter() {
@@ -419,7 +411,6 @@ public class HopVfsFileDialog implements IFileDialog, IDirectoryDialog {
     wBookmarks.setMenu(menu);
 
     // Drag and drop to bookmarks
-    //
     DropTarget target = new DropTarget(wBookmarks, DND.DROP_MOVE);
     target.setTransfer(TextTransfer.getInstance());
     target.addDropListener(
@@ -469,9 +460,7 @@ public class HopVfsFileDialog implements IFileDialog, IDirectoryDialog {
           }
         });
 
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////
     // On the right there is a folder and files browser
-    //
     Composite browserComposite = new Composite(sashForm, SWT.BORDER);
     PropsUi.setLook(browserComposite);
     browserComposite.setLayout(new FormLayout());
@@ -484,7 +473,6 @@ public class HopVfsFileDialog implements IFileDialog, IDirectoryDialog {
     browserComposite.setLayoutData(fdTreeComposite);
 
     // A toolbar above the browser, below the filename
-    //
     ToolBar browserToolBar = new ToolBar(browserComposite, SWT.WRAP | SWT.LEFT | SWT.HORIZONTAL);
     FormData fdBrowserToolBar = new FormData();
     fdBrowserToolBar.left = new FormAttachment(0, 0);
@@ -553,7 +541,6 @@ public class HopVfsFileDialog implements IFileDialog, IDirectoryDialog {
     wBrowserEditor.grabHorizontal = true;
 
     // Put file details or message/logging label at the bottom...
-    //
     wDetails = new Text(browseSash, SWT.MULTI | SWT.H_SCROLL | SWT.V_SCROLL | SWT.READ_ONLY);
     PropsUi.setLook(wDetails);
 
@@ -573,7 +560,6 @@ public class HopVfsFileDialog implements IFileDialog, IDirectoryDialog {
     BaseTransformDialog.setSize(shell);
 
     // The shell size usually ends up a bit too narrow so let's make it a bit higher
-    //
     Point shellSize = shell.getSize();
     if (shellSize.y < shellSize.x / 2) {
       shell.setSize(shellSize.x, shellSize.x / 2);
@@ -781,7 +767,7 @@ public class HopVfsFileDialog implements IFileDialog, IDirectoryDialog {
             BaseMessages.getString(PKG, "HopVfsFileDialog.FileInfo.Tooltip.Symlink") + Const.CR;
       }
       Map<String, Object> attributes = content.getAttributes();
-      if (attributes != null && !attributes.isEmpty()) {
+      if (!Utils.isEmpty(attributes)) {
         details +=
             BaseMessages.getString(PKG, "HopVfsFileDialog.FileInfo.Tooltip.Attributes") + Const.CR;
         for (String key : attributes.keySet()) {
@@ -1292,9 +1278,11 @@ public class HopVfsFileDialog implements IFileDialog, IDirectoryDialog {
       if (fileObject.isFile() || !fileObject.exists()) {
         fileObject = fileObject.getParent();
       }
-      FileObject navigateUpParent = fileObject.getParent();
-      if (navigateUpParent != null) {
-        navigateTo(HopVfs.getFilename(navigateUpParent), true);
+      if (fileObject != null) {
+        FileObject navigateUpParent = fileObject.getParent();
+        if (navigateUpParent != null) {
+          navigateTo(HopVfs.getFilename(navigateUpParent), true);
+        }
       }
     } catch (Exception e) {
       showError(
@@ -1318,7 +1306,7 @@ public class HopVfsFileDialog implements IFileDialog, IDirectoryDialog {
             BaseMessages.getString(PKG, "HopVfsFileDialog.CreateFolder.Header"),
             BaseMessages.getString(PKG, "HopVfsFileDialog.CreateFolder.Message", activeFolder));
     folder = dialog.open();
-    if (folder != null && !folder.isEmpty()) {
+    if (!Utils.isEmpty(folder)) {
       String newPath = activeFolder.toString();
       if (!newPath.endsWith("/") && !newPath.endsWith("\\")) {
         newPath += "/";
@@ -1384,6 +1372,8 @@ public class HopVfsFileDialog implements IFileDialog, IDirectoryDialog {
                 break;
               case SWT.ESC:
                 renameText.dispose();
+                break;
+              default:
                 break;
             }
           });

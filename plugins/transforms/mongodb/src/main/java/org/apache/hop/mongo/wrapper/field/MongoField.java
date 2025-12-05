@@ -17,6 +17,7 @@
 
 package org.apache.hop.mongo.wrapper.field;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.mongodb.BasicDBList;
 import com.mongodb.BasicDBObject;
 import java.math.BigDecimal;
@@ -32,7 +33,9 @@ import org.apache.hop.core.variables.IVariables;
 import org.apache.hop.i18n.BaseMessages;
 import org.apache.hop.pipeline.transforms.mongodbinput.MongoDbInputData;
 import org.bson.BsonUndefined;
+import org.bson.Document;
 import org.bson.types.Binary;
+import org.bson.types.Decimal128;
 
 public class MongoField implements Comparable<MongoField> {
   protected static final Class<?> PKG = MongoField.class;
@@ -236,7 +239,25 @@ public class MongoField implements Comparable<MongoField> {
         return tempValueMeta.getNumber(fieldValue);
       case IValueMeta.TYPE_STRING:
         return tempValueMeta.getString(fieldValue);
+      case IValueMeta.TYPE_JSON:
+        // Jackson JsonNode handling:
+        // Supports JSON values (and binary type 0), BSON objects like Date/UUID
+        // are not supported since they're not JSON values
+        return tempValueMeta.getJson(fieldValue);
       default:
+        // UUID support
+        try {
+          int uuidTypeId = ValueMetaFactory.getIdForValueMeta("UUID");
+          if (tempValueMeta.getType() == uuidTypeId) {
+            if (fieldValue instanceof java.util.UUID uuid) {
+              return uuid;
+            } else {
+              return java.util.UUID.fromString(fieldValue.toString());
+            }
+          }
+        } catch (Exception ignore) {
+          // UUID plugin not present, fall through
+        }
         return null;
     }
   }
@@ -337,7 +358,7 @@ public class MongoField implements Comparable<MongoField> {
 
     if (part.indexOf(']') < part.length() - 1) {
       // more dimensions to the array
-      part = part.substring(part.indexOf(']') + 1, part.length());
+      part = part.substring(part.indexOf(']') + 1);
       tempParts.add(0, part);
     }
 
@@ -401,5 +422,42 @@ public class MongoField implements Comparable<MongoField> {
   @Injection(name = "FIELD_INDEXED", group = "FIELDS")
   public void setIndexedVals(String vals) {
     indexedValues = MongoDbInputData.indexedValsList(vals);
+  }
+
+  /** Converts a JsonNode in a Document object */
+  public static Object toBsonFromJsonNode(JsonNode n) {
+    if (n == null) return null;
+
+    switch (n.getNodeType()) {
+      case OBJECT:
+        Document d = new Document();
+        // for each entry in JsonNode, create an entry in Document
+        n.fields().forEachRemaining(e -> d.put(e.getKey(), toBsonFromJsonNode(e.getValue())));
+        return d;
+      case ARRAY:
+        var list = new java.util.ArrayList<>(n.size());
+        n.forEach(el -> list.add(toBsonFromJsonNode(el)));
+        return list;
+      case STRING:
+        return n.textValue();
+      case BOOLEAN:
+        return n.booleanValue();
+      case NUMBER:
+        if (n.isIntegralNumber()) {
+          long v = n.longValue();
+          return (v >= Integer.MIN_VALUE && v <= Integer.MAX_VALUE) ? (int) v : v;
+        }
+        if (n.isBigDecimal()) return Decimal128.parse(n.decimalValue().toPlainString());
+        return n.doubleValue();
+      case BINARY:
+        try {
+          return new Binary(n.binaryValue());
+        } catch (Exception ignore) {
+          // fall through
+        }
+        // fallback, string representation
+      default:
+        return n.asText();
+    }
   }
 }

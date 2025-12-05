@@ -363,9 +363,17 @@ public class ContextDialog extends Dialog {
       }
       // Load or get from the image cache...
       //
-      Image image =
-          GuiResource.getInstance()
-              .getImage(action.getImage(), classLoader, correctedIconSize, correctedIconSize);
+      Image image;
+      try {
+        image =
+            GuiResource.getInstance()
+                .getImage(action.getImage(), classLoader, correctedIconSize, correctedIconSize);
+      } catch (Exception e) {
+        image =
+            GuiResource.getInstance()
+                .getSwtImageMissing()
+                .getAsBitmapForSize(display, correctedIconSize, correctedIconSize);
+      }
       items.add(new Item(action, image));
     }
 
@@ -727,6 +735,9 @@ public class ContextDialog extends Dialog {
   }
 
   private Button getCategoriesCheckBox() {
+    if (toolBarWidgets == null) {
+      return null;
+    }
     ToolItem checkboxItem = toolBarWidgets.findToolItem(TOOLBAR_ITEM_ENABLE_CATEGORIES);
     if (checkboxItem == null) {
       return null;
@@ -735,6 +746,9 @@ public class ContextDialog extends Dialog {
   }
 
   private Button getFixedWidthCheckBox() {
+    if (toolBarWidgets == null) {
+      return null;
+    }
     ToolItem checkboxItem = toolBarWidgets.findToolItem(TOOLBAR_ITEM_FIXED_WIDTH);
     if (checkboxItem == null) {
       return null;
@@ -780,6 +794,7 @@ public class ContextDialog extends Dialog {
 
           dispose();
         }
+        break;
       default:
         break;
     }
@@ -1048,29 +1063,27 @@ public class ContextDialog extends Dialog {
 
       // See if we need to show the selected item.
       //
-      if (!EnvironmentUtils.getInstance().isWeb()) {
-        if (scroll && totalContentHeight > 0) {
-          Rectangle itemArea = selectedItem.getAreaOwner().getArea();
-          org.eclipse.swt.graphics.Rectangle clientArea = wScrolledComposite.getClientArea();
+      if (!EnvironmentUtils.getInstance().isWeb() && scroll && totalContentHeight > 0) {
+        Rectangle itemArea = selectedItem.getAreaOwner().getArea();
+        org.eclipse.swt.graphics.Rectangle clientArea = wScrolledComposite.getClientArea();
 
-          ScrollBar verticalBar = wScrolledComposite.getVerticalBar();
-          // Scroll down
-          //
-          while (itemArea.y + itemArea.height + 2 * yMargin
-              > verticalBar.getSelection() + clientArea.height) {
-            wScrolledComposite.setOrigin(
-                0,
-                Math.min(
-                    verticalBar.getSelection() + verticalBar.getPageIncrement(),
-                    verticalBar.getMaximum() - verticalBar.getThumb()));
-          }
+        ScrollBar verticalBar = wScrolledComposite.getVerticalBar();
+        // Scroll down
+        //
+        while (itemArea.y + itemArea.height + 2 * yMargin
+            > verticalBar.getSelection() + clientArea.height) {
+          wScrolledComposite.setOrigin(
+              0,
+              Math.min(
+                  verticalBar.getSelection() + verticalBar.getPageIncrement(),
+                  verticalBar.getMaximum() - verticalBar.getThumb()));
+        }
 
-          // Scroll up
-          //
-          while (itemArea.y < verticalBar.getSelection()) {
-            wScrolledComposite.setOrigin(
-                0, Math.max(verticalBar.getSelection() - verticalBar.getPageIncrement(), 0));
-          }
+        // Scroll up
+        //
+        while (itemArea.y < verticalBar.getSelection()) {
+          wScrolledComposite.setOrigin(
+              0, Math.max(verticalBar.getSelection() - verticalBar.getPageIncrement(), 0));
         }
       }
     }
@@ -1183,6 +1196,8 @@ public class ContextDialog extends Dialog {
       case SWT.END:
         selectItem(lastShownItem, true);
         break;
+      default:
+        break;
     }
   }
 
@@ -1209,10 +1224,8 @@ public class ContextDialog extends Dialog {
         // Only keep the items to the left
         //
         Rectangle r = areaOwner.getArea();
-        if (r.x > area.x + area.width) {
-          if (r.y - 2 * yMargin < area.y && r.y + 2 * yMargin > area.y) {
-            rightAreas.add(areaOwner);
-          }
+        if (r.x > area.x + area.width && r.y - 2 * yMargin < area.y && r.y + 2 * yMargin > area.y) {
+          rightAreas.add(areaOwner);
         }
       }
     }
@@ -1231,13 +1244,10 @@ public class ContextDialog extends Dialog {
         // Only keep the items to the left
         //
         Rectangle r = areaOwner.getArea();
-        if (r.x < area.x) {
-
+        if (r.x < area.x && r.y - 2 * yMargin < area.y && r.y + 2 * yMargin > area.y) {
           // Select only in the same band of items
           //
-          if (r.y - 2 * yMargin < area.y && r.y + 2 * yMargin > area.y) {
-            leftAreas.add(areaOwner);
-          }
+          leftAreas.add(areaOwner);
         }
       }
     }
@@ -1252,12 +1262,10 @@ public class ContextDialog extends Dialog {
   private void selectItemUp(Rectangle area) {
     List<AreaOwner> topAreas = new ArrayList<>();
     for (AreaOwner areaOwner : areaOwners) {
-      if (areaOwner.getOwner() instanceof Item) {
+      if (areaOwner.getOwner() instanceof Item && areaOwner.getArea().y < area.y) {
         // Only keep the items to the left
         //
-        if (areaOwner.getArea().y < area.y) {
-          topAreas.add(areaOwner);
-        }
+        topAreas.add(areaOwner);
       }
     }
     selectClosest(area, topAreas);
@@ -1271,12 +1279,10 @@ public class ContextDialog extends Dialog {
   private void selectItemDown(Rectangle area) {
     List<AreaOwner> bottomAreas = new ArrayList<>();
     for (AreaOwner areaOwner : areaOwners) {
-      if (areaOwner.getOwner() instanceof Item) {
+      if (areaOwner.getOwner() instanceof Item && areaOwner.getArea().y > area.y + area.height) {
         // Only keep the items to the left
         //
-        if (areaOwner.getArea().y > area.y + area.height) {
-          bottomAreas.add(areaOwner);
-        }
+        bottomAreas.add(areaOwner);
       }
     }
     selectClosest(area, bottomAreas);
@@ -1286,12 +1292,11 @@ public class ContextDialog extends Dialog {
     ScrollBar verticalBar = wScrolledComposite.getVerticalBar();
     List<AreaOwner> topAreas = new ArrayList<>();
     for (AreaOwner areaOwner : areaOwners) {
-      if (areaOwner.getOwner() instanceof Item) {
+      if (areaOwner.getOwner() instanceof Item
+          && areaOwner.getArea().y < area.y - verticalBar.getPageIncrement()) {
         // Only keep the items to the left
         //
-        if (areaOwner.getArea().y < area.y - verticalBar.getPageIncrement()) {
-          topAreas.add(areaOwner);
-        }
+        topAreas.add(areaOwner);
       }
     }
     if (topAreas.isEmpty()) topAreas.add(firstShownItem.getAreaOwner());
@@ -1344,10 +1349,8 @@ public class ContextDialog extends Dialog {
   private Item findItem(int x, int y) {
 
     for (AreaOwner areaOwner : areaOwners) {
-      if (areaOwner.contains(x, y)) {
-        if (areaOwner.getOwner() instanceof Item item) {
-          return item;
-        }
+      if (areaOwner.contains(x, y) && areaOwner.getOwner() instanceof Item item) {
+        return item;
       }
     }
 

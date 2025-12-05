@@ -71,7 +71,7 @@ public class LoopNodesImportProgressDialog {
     this.option = option;
     this.xpaths = null;
 
-    if (option.isXmlSourceIsFile()) {
+    if (option.isXmlSourceFile()) {
       this.filename = xmlSource;
       this.xml = null;
       this.url = null;
@@ -110,15 +110,7 @@ public class LoopNodesImportProgressDialog {
     try {
       ProgressMonitorDialog pmd = new ProgressMonitorDialog(shell);
       pmd.run(true, op);
-    } catch (InvocationTargetException e) {
-      new ErrorDialog(
-          shell,
-          BaseMessages.getString(
-              PKG, "GetXMLDateLoopNodesImportProgressDialog.ErrorScanningFile.Title"),
-          BaseMessages.getString(
-              PKG, "GetXMLDateLoopNodesImportProgressDialog.ErrorScanningFile.Message"),
-          e);
-    } catch (InterruptedException e) {
+    } catch (InvocationTargetException | InterruptedException e) {
       new ErrorDialog(
           shell,
           BaseMessages.getString(

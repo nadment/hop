@@ -195,6 +195,7 @@ public class MailDialog extends BaseTransformDialog {
 
   private Button wIncludeMessageInOutput;
 
+  private Label wlMessageOutputField;
   private TextVar wMessageOutputField;
 
   private Button wCheckServerIdentity;
@@ -1392,14 +1393,14 @@ public class MailDialog extends BaseTransformDialog {
         });
 
     // OutputFieldName textvar
-    Label wlMessageOutputFIeld = new Label(wMessageGroup, SWT.RIGHT);
-    wlMessageOutputFIeld.setText(BaseMessages.getString(PKG, "Mail.IncldueMessageField.Label"));
-    PropsUi.setLook(wlMessageOutputFIeld);
-    FormData fdlMessageOutputFIeld = new FormData();
-    fdlMessageOutputFIeld.left = new FormAttachment(0, 0);
-    fdlMessageOutputFIeld.top = new FormAttachment(wIncludeMessageInOutput, margin);
-    fdlMessageOutputFIeld.right = new FormAttachment(middle, -margin);
-    wlMessageOutputFIeld.setLayoutData(fdlMessageOutputFIeld);
+    wlMessageOutputField = new Label(wMessageGroup, SWT.RIGHT);
+    wlMessageOutputField.setText(BaseMessages.getString(PKG, "Mail.IncldueMessageField.Label"));
+    PropsUi.setLook(wlMessageOutputField);
+    FormData fdlMessageOutputField = new FormData();
+    fdlMessageOutputField.left = new FormAttachment(0, 0);
+    fdlMessageOutputField.top = new FormAttachment(wIncludeMessageInOutput, margin);
+    fdlMessageOutputField.right = new FormAttachment(middle, -margin);
+    wlMessageOutputField.setLayoutData(fdlMessageOutputField);
 
     wMessageOutputField = new TextVar(variables, wMessageGroup, SWT.SINGLE | SWT.LEFT | SWT.BORDER);
     PropsUi.setLook(wMessageOutputField);
@@ -1408,7 +1409,7 @@ public class MailDialog extends BaseTransformDialog {
     wMessageOutputField.addModifyListener(lsMod);
     FormData fdMessageOutputField = new FormData();
     fdMessageOutputField.left = new FormAttachment(middle, 0);
-    fdMessageOutputField.top = new FormAttachment(wlMessageOutputFIeld, 0, SWT.CENTER);
+    fdMessageOutputField.top = new FormAttachment(wlMessageOutputField, 0, SWT.CENTER);
     fdMessageOutputField.right = new FormAttachment(100, 0);
     wMessageOutputField.setLayoutData(fdMessageOutputField);
 
@@ -2081,7 +2082,7 @@ public class MailDialog extends BaseTransformDialog {
     int rows =
         input.getEmbeddedImages() == null
             ? 1
-            : (input.getEmbeddedImages().size() == 0 ? 0 : input.getEmbeddedImages().size());
+            : (input.getEmbeddedImages().isEmpty() ? 0 : input.getEmbeddedImages().size());
     final int FieldsRows = rows;
 
     ColumnInfo[] colinf =
@@ -2467,6 +2468,7 @@ public class MailDialog extends BaseTransformDialog {
     wSecureConnectionType.setEnabled(wUseSecAuth.getSelection());
     wlSecureConnectionType.setEnabled(wUseSecAuth.getSelection());
     wTrustedHosts.setEnabled(wUseSecAuth.getSelection());
+    wlCheckServerIdentity.setEnabled(wUseSecAuth.getSelection());
     wCheckServerIdentity.setEnabled(wUseSecAuth.getSelection());
   }
 
@@ -2780,7 +2782,7 @@ public class MailDialog extends BaseTransformDialog {
     int nr = 0;
     for (int i = 0; i < nrItems; i++) {
       String arg = wFields.getNonEmpty(i).getText(1);
-      if (arg != null && arg.length() != 0) {
+      if (!Utils.isEmpty(arg)) {
         nr++;
       }
     }
@@ -2790,7 +2792,7 @@ public class MailDialog extends BaseTransformDialog {
     for (int i = 0; i < nrItems; i++) {
       String arg = wFields.getNonEmpty(i).getText(1);
       String id = wFields.getNonEmpty(i).getText(2);
-      if (arg != null && arg.length() != 0) {
+      if (!Utils.isEmpty(arg)) {
         MailEmbeddedImageField image = new MailEmbeddedImageField();
         image.setEmbeddedimage(arg);
         image.setContentId(id);
@@ -2814,5 +2816,6 @@ public class MailDialog extends BaseTransformDialog {
 
   private void setOutputMessage() {
     wMessageOutputField.setEnabled(wIncludeMessageInOutput.getSelection());
+    wlMessageOutputField.setEnabled(wIncludeMessageInOutput.getSelection());
   }
 }

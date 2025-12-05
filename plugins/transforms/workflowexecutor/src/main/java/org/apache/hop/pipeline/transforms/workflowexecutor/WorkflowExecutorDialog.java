@@ -133,7 +133,7 @@ public class WorkflowExecutorDialog extends BaseTransformDialog {
   private final int margin = PropsUi.getMargin();
 
   private HopWorkflowFileType<WorkflowMeta> fileType =
-      HopGui.getDataOrchestrationPerspective().getWorkflowFileType();
+      HopGui.getExplorerPerspective().getWorkflowFileType();
 
   public WorkflowExecutorDialog(
       Shell parent,
@@ -291,7 +291,7 @@ public class WorkflowExecutorDialog extends BaseTransformDialog {
     return SwtSvgImageUtil.getImage(
         shell.getDisplay(),
         getClass().getClassLoader(),
-        "ui/images/workflowexecutor.svg",
+        "workflowexecutor.svg",
         ConstUi.LARGE_ICON_SIZE,
         ConstUi.LARGE_ICON_SIZE);
   }

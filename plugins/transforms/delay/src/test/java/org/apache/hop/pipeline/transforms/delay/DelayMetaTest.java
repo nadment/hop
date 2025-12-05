@@ -22,28 +22,37 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.apache.hop.core.exception.HopException;
-import org.apache.hop.junit.rules.RestoreHopEngineEnvironment;
+import org.apache.hop.junit.rules.RestoreHopEngineEnvironmentExtension;
 import org.apache.hop.pipeline.transforms.loadsave.LoadSaveTester;
-import org.junit.ClassRule;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.RegisterExtension;
 
-public class DelayMetaTest {
-  @ClassRule public static RestoreHopEngineEnvironment env = new RestoreHopEngineEnvironment();
+class DelayMetaTest {
+  @RegisterExtension
+  static RestoreHopEngineEnvironmentExtension env = new RestoreHopEngineEnvironmentExtension();
 
   @Test
-  public void testTransformMeta() throws HopException {
-    List<String> attributes = Arrays.asList("timeout", "scaletime");
+  void testTransformMeta() throws HopException {
+    List<String> attributes =
+        Arrays.asList(
+            "timeout", "timeoutField", "scaletime", "scaleTimeFromField", "scaleTimeField");
 
     Map<String, String> getterMap = new HashMap<>();
     getterMap.put("timeout", "getTimeout");
+    getterMap.put("timeoutField", "getTimeoutField");
     getterMap.put("scaletime", "getScaletime");
+    getterMap.put("scaleTimeFromField", "isScaleTimeFromField");
+    getterMap.put("scaleTimeField", "getScaleTimeField");
 
     Map<String, String> setterMap = new HashMap<>();
     setterMap.put("timeout", "setTimeout");
+    setterMap.put("timeoutField", "setTimeoutField");
     setterMap.put("scaletime", "setScaletime");
+    setterMap.put("scaleTimeFromField", "setScaleTimeFromField");
+    setterMap.put("scaleTimeField", "setScaleTimeField");
 
-    LoadSaveTester loadSaveTester =
-        new LoadSaveTester(DelayMeta.class, attributes, getterMap, setterMap);
+    LoadSaveTester<DelayMeta> loadSaveTester =
+        new LoadSaveTester<>(DelayMeta.class, attributes, getterMap, setterMap);
     loadSaveTester.testSerialization();
   }
 }

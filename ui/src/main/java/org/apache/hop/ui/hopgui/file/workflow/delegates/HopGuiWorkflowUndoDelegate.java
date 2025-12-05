@@ -28,7 +28,6 @@ import org.apache.hop.workflow.WorkflowMeta;
 import org.apache.hop.workflow.action.ActionMeta;
 
 public class HopGuiWorkflowUndoDelegate {
-  private static final Class<?> PKG = HopGui.class;
 
   private HopGuiWorkflowGraph workflowGraph;
   private HopGui hopGui;
@@ -114,6 +113,8 @@ public class HopGuiWorkflowUndoDelegate {
           ActionMeta from = workflowMeta.findAction(hopMeta.getFromAction().getName());
           ActionMeta to = workflowMeta.findAction(hopMeta.getToAction().getName());
           WorkflowHopMeta newHopMeta = new WorkflowHopMeta(from, to);
+          newHopMeta.setEvaluation(hopMeta.isEvaluation());
+          newHopMeta.setUnconditional(hopMeta.isUnconditional());
           workflowMeta.addWorkflowHop(idx, newHopMeta);
         }
         break;
@@ -183,10 +184,8 @@ public class HopGuiWorkflowUndoDelegate {
     }
 
     // OK, now check if we need to do this again...
-    if (workflowMeta.viewNextUndo() != null) {
-      if (workflowMeta.viewNextUndo().getNextAlso()) {
-        undoWorkflowAction(handler, workflowMeta);
-      }
+    if (workflowMeta.viewNextUndo() != null && workflowMeta.viewNextUndo().getNextAlso()) {
+      undoWorkflowAction(handler, workflowMeta);
     }
   }
 
@@ -296,7 +295,7 @@ public class HopGuiWorkflowUndoDelegate {
         //
         // CHANGE POSITION
         //
-      case PositionTransform:
+      case PositionAction:
         for (int i = 0; i < changeAction.getCurrentIndex().length; i++) {
           // Find & change the location of the transform:
           ActionMeta action = workflowMeta.getAction(changeAction.getCurrentIndex()[i]);
@@ -316,10 +315,8 @@ public class HopGuiWorkflowUndoDelegate {
     }
 
     // OK, now check if we need to do this again...
-    if (workflowMeta.viewNextUndo() != null) {
-      if (workflowMeta.viewNextUndo().getNextAlso()) {
-        redoWorkflowAction(handler, workflowMeta);
-      }
+    if (workflowMeta.viewNextUndo() != null && workflowMeta.viewNextUndo().getNextAlso()) {
+      redoWorkflowAction(handler, workflowMeta);
     }
   }
 

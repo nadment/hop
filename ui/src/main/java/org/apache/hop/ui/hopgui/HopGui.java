@@ -27,13 +27,16 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import lombok.Getter;
+import lombok.Setter;
 import org.apache.commons.io.output.TeeOutputStream;
 import org.apache.commons.lang.StringUtils;
+import org.apache.commons.vfs2.FileObject;
+import org.apache.commons.vfs2.FileSystemException;
 import org.apache.hop.core.Const;
 import org.apache.hop.core.DbCache;
 import org.apache.hop.core.HopEnvironment;
@@ -42,6 +45,7 @@ import org.apache.hop.core.config.DescribedVariablesConfigFile;
 import org.apache.hop.core.config.HopConfig;
 import org.apache.hop.core.database.DatabaseMeta;
 import org.apache.hop.core.exception.HopException;
+import org.apache.hop.core.exception.HopFileException;
 import org.apache.hop.core.exception.HopXmlException;
 import org.apache.hop.core.extension.ExtensionPointHandler;
 import org.apache.hop.core.extension.HopExtensionPoint;
@@ -69,6 +73,7 @@ import org.apache.hop.core.util.TranslateUtil;
 import org.apache.hop.core.variables.DescribedVariable;
 import org.apache.hop.core.variables.IVariables;
 import org.apache.hop.core.variables.Variables;
+import org.apache.hop.core.vfs.HopVfs;
 import org.apache.hop.core.xml.XmlHandler;
 import org.apache.hop.i18n.BaseMessages;
 import org.apache.hop.i18n.LanguageChoice;
@@ -116,7 +121,6 @@ import org.apache.hop.ui.hopgui.perspective.HopPerspectivePlugin;
 import org.apache.hop.ui.hopgui.perspective.HopPerspectivePluginType;
 import org.apache.hop.ui.hopgui.perspective.IHopPerspective;
 import org.apache.hop.ui.hopgui.perspective.configuration.ConfigurationPerspective;
-import org.apache.hop.ui.hopgui.perspective.dataorch.HopDataOrchestrationPerspective;
 import org.apache.hop.ui.hopgui.perspective.execution.ExecutionPerspective;
 import org.apache.hop.ui.hopgui.perspective.explorer.ExplorerPerspective;
 import org.apache.hop.ui.hopgui.perspective.metadata.MetadataPerspective;
@@ -149,6 +153,8 @@ import org.w3c.dom.Node;
 
 @GuiPlugin(description = "The main hop graphical user interface")
 @SuppressWarnings("java:S1104")
+@Getter
+@Setter
 public class HopGui
     implements IActionContextHandlersProvider, ISearchableProvider, IHasHopMetadataProvider {
   private static final Class<?> PKG = HopGui.class;
@@ -213,6 +219,8 @@ public class HopGui
   public static final String ID_MAIN_TOOLBAR_SAVE = "toolbar-10040-save";
   public static final String ID_MAIN_TOOLBAR_SAVE_AS = "toolbar-10050-save-as";
 
+  public static final String ID_STATUS_TOOLBAR = "HopGui-Status-Toolbar";
+
   public static final String GUI_PLUGIN_PERSPECTIVES_PARENT_ID = "HopGui-Perspectives";
 
   public static final String DEFAULT_HOP_GUI_NAMESPACE = "hop-gui";
@@ -247,6 +255,9 @@ public class HopGui
 
   private ToolBar mainToolbar;
   private GuiToolbarWidgets mainToolbarWidgets;
+
+  private ToolBar statusToolbar;
+  private GuiToolbarWidgets statusToolbarWidgets;
 
   private ToolBar perspectivesToolbar;
   private Composite mainPerspectivesComposite;
@@ -319,15 +330,16 @@ public class HopGui
     PROVIDER = (ISingletonProvider) ImplementationLoader.newInstance(HopGui.class);
   }
 
-  public static final HopGui getInstance() {
+  public static HopGui getInstance() {
     return (HopGui) PROVIDER.getInstanceInternal();
   }
 
   public static void main(String[] arguments) {
     try {
-
       setupConsoleLogging();
-      HopEnvironment.init();
+      if (!HopEnvironment.isInitialized()) {
+        HopEnvironment.init();
+      }
       OsHelper.setAppName();
       Display display = setupDisplay();
 
@@ -336,7 +348,9 @@ public class HopGui
 
       // Initialize the logging backend
       //
-      HopLogStore.init();
+      if (!HopLogStore.isInitialized()) {
+        HopLogStore.init();
+      }
       Locale.setDefault(LanguageChoice.getInstance().getDefaultLocale());
 
       HopGui hopGui = HopGui.getInstance();
@@ -383,7 +397,7 @@ public class HopGui
   protected void open() {
     shell.setImage(GuiResource.getInstance().getImageHopUiTaskbar());
 
-    /**
+    /*
      * On macOs the image gets loaded too soon, add a listener to set the image when the shell is
      * loaded
      */
@@ -407,6 +421,7 @@ public class HopGui
     shell.setText(BaseMessages.getString(PKG, "HopGui.Application.Name"));
     addMainMenu();
     addMainToolbar();
+    addStatusToolbar();
     addPerspectivesToolbar();
     addMainPerspectivesComposite();
 
@@ -462,6 +477,10 @@ public class HopGui
           reOpeningFiles = false;
         });
 
+    // Activate the default perspective
+    //
+    getExplorerPerspective().activate();
+
     // See if we need to show the Welcome dialog
     //
 
@@ -508,16 +527,34 @@ public class HopGui
 
     // Try loading code exclusions
     try {
-      String path = Const.HOP_CONFIG_FOLDER + File.separator + "disabledGuiElements.xml";
+      FileObject applicationFolderFile = HopVfs.getFileObject("./disabledGuiElements.xml");
+      FileObject configFolderFile =
+          HopVfs.getFileObject(
+              Const.HOP_CONFIG_FOLDER + File.separator + "disabledGuiElements.xml");
+      String path = null;
 
-      Document document = XmlHandler.loadXmlFile(path);
-      Node exclusionsNode = XmlHandler.getSubNode(document, "exclusions");
-      List<Node> exclusionNodes = XmlHandler.getNodes(exclusionsNode, "exclusion");
+      if (applicationFolderFile.exists()) {
+        path = applicationFolderFile.getPath().toAbsolutePath().toString();
+        Document document = XmlHandler.loadXmlFile(path);
+        Node exclusionsNode = XmlHandler.getSubNode(document, "exclusions");
+        List<Node> exclusionNodes = XmlHandler.getNodes(exclusionsNode, "exclusion");
 
-      for (Node exclusionNode : exclusionNodes) {
-        excludedGuiElements.add(exclusionNode.getTextContent());
+        for (Node exclusionNode : exclusionNodes) {
+          excludedGuiElements.add(exclusionNode.getTextContent());
+        }
       }
-    } catch (HopXmlException e) {
+
+      if (configFolderFile.exists()) {
+        path = configFolderFile.getPath().toAbsolutePath().toString();
+        Document document = XmlHandler.loadXmlFile(path);
+        Node exclusionsNode = XmlHandler.getSubNode(document, "exclusions");
+        List<Node> exclusionNodes = XmlHandler.getNodes(exclusionsNode, "exclusion");
+
+        for (Node exclusionNode : exclusionNodes) {
+          excludedGuiElements.add(exclusionNode.getTextContent());
+        }
+      }
+    } catch (HopXmlException | FileSystemException | HopFileException e) {
       // ignore
     }
 
@@ -526,12 +563,11 @@ public class HopGui
       //
       perspectiveManager = new HopPerspectiveManager(this);
       PluginRegistry pluginRegistry = PluginRegistry.getInstance();
-      boolean first = true;
       List<Plugin> perspectivePlugins = pluginRegistry.getPlugins(HopPerspectivePluginType.class);
 
       // Sort by id
       //
-      Collections.sort(perspectivePlugins, Comparator.comparing(p -> p.getIds()[0]));
+      perspectivePlugins.sort(Comparator.comparing(p -> p.getIds()[0]));
 
       for (Plugin perspectivePlugin : perspectivePlugins) {
 
@@ -542,7 +578,7 @@ public class HopGui
         Class<IHopPerspective> perspectiveClass =
             pluginRegistry.getClass(perspectivePlugin, IHopPerspective.class);
 
-        // Create a new instance & initialize.
+        // Create a new instance and initialize.
         //
         final IHopPerspective perspective = perspectiveClass.getConstructor().newInstance();
         perspective.initialize(this, mainPerspectivesComposite);
@@ -554,7 +590,6 @@ public class HopGui
             Const.NVL(
                 TranslateUtil.translate(perspectivePlugin.getName(), perspectiveClass),
                 perspective.getId());
-        Listener listener = event -> setActivePerspective(perspective);
         ClassLoader classLoader = pluginRegistry.getClassLoader(perspectivePlugin);
 
         ToolItem item;
@@ -565,11 +600,20 @@ public class HopGui
                   this.perspectivesToolbar,
                   perspectivePlugin.getImageFile(),
                   tooltip,
-                  listener);
+                  // TODO: check if there is unnecessary refresh
+                  event -> setActivePerspective(perspective));
         } else {
           item = new ToolItem(this.perspectivesToolbar, SWT.RADIO);
           item.setToolTipText(tooltip);
-          item.addListener(SWT.Selection, listener);
+          item.addListener(
+              SWT.Selection,
+              event -> {
+                // Event is sent first to the unselected tool item and then the selected item.
+                // To avoid unnecessary refresh, only activate perspective on the selected item.
+                if (item.getSelection()) {
+                  setActivePerspective(perspective);
+                }
+              });
           Image image =
               GuiResource.getInstance()
                   .getImage(
@@ -589,11 +633,6 @@ public class HopGui
                 .findKeyboardShortcut(perspectiveClass.getName(), "activate", Const.isOSX());
         if (shortcut != null) {
           item.setToolTipText(item.getToolTipText() + " (" + shortcut + ')');
-        }
-
-        if (first) {
-          first = false;
-          item.setSelection(true);
         }
       }
       perspectivesToolbar.pack();
@@ -1213,7 +1252,7 @@ public class HopGui
   }
 
   protected void addMainToolbar() {
-    mainToolbar = new ToolBar(shell, SWT.WRAP | SWT.LEFT | SWT.HORIZONTAL);
+    mainToolbar = new ToolBar(shell, SWT.WRAP | SWT.RIGHT | SWT.HORIZONTAL);
     FormData fdToolBar = new FormData();
     fdToolBar.left = new FormAttachment(0, 0);
     fdToolBar.top = new FormAttachment(0, 0);
@@ -1227,6 +1266,21 @@ public class HopGui
     mainToolbar.pack();
   }
 
+  protected void addStatusToolbar() {
+    statusToolbar = new ToolBar(shell, SWT.WRAP | SWT.RIGHT | SWT.HORIZONTAL);
+    FormData fdToolBar = new FormData();
+    fdToolBar.left = new FormAttachment(0, 0);
+    fdToolBar.right = new FormAttachment(100, 0);
+    fdToolBar.bottom = new FormAttachment(100, 0);
+    statusToolbar.setLayoutData(fdToolBar);
+    PropsUi.setLook(statusToolbar, Props.WIDGET_STYLE_TOOLBAR);
+
+    statusToolbarWidgets = new GuiToolbarWidgets();
+    statusToolbarWidgets.registerGuiPluginObject(this);
+    statusToolbarWidgets.createToolbarWidgets(statusToolbar, ID_STATUS_TOOLBAR);
+    statusToolbar.pack();
+  }
+
   protected void addPerspectivesToolbar() {
     // We can't mix horizontal and vertical toolbars so we need to add a composite.
     //
@@ -1237,7 +1291,7 @@ public class HopGui
     formData.left = new FormAttachment(0, 0);
     formData.right = new FormAttachment(100, 0);
     formData.top = new FormAttachment(mainToolbar, 0);
-    formData.bottom = new FormAttachment(100, 0);
+    formData.bottom = new FormAttachment(statusToolbar, 0);
     mainHopGuiComposite.setLayoutData(formData);
 
     perspectivesToolbar = new ToolBar(mainHopGuiComposite, SWT.WRAP | SWT.RIGHT | SWT.VERTICAL);
@@ -1431,181 +1485,6 @@ public class HopGui
   }
 
   /**
-   * Gets shell
-   *
-   * @return value of shell
-   */
-  public Shell getShell() {
-    return shell;
-  }
-
-  public void setShell(Shell shell) {
-    this.shell = shell;
-  }
-
-  /**
-   * Gets display
-   *
-   * @return value of display
-   */
-  public Display getDisplay() {
-    return display;
-  }
-
-  /**
-   * Gets commandLineArguments
-   *
-   * @return value of commandLineArguments
-   */
-  public List<String> getCommandLineArguments() {
-    return commandLineArguments;
-  }
-
-  /**
-   * @param commandLineArguments The commandLineArguments to set
-   */
-  public void setCommandLineArguments(List<String> commandLineArguments) {
-    this.commandLineArguments = commandLineArguments;
-  }
-
-  /**
-   * Gets mainPerspectivesComposite
-   *
-   * @return value of mainPerspectivesComposite
-   */
-  public Composite getMainPerspectivesComposite() {
-    return mainPerspectivesComposite;
-  }
-
-  /**
-   * @param mainPerspectivesComposite The mainPerspectivesComposite to set
-   */
-  public void setMainPerspectivesComposite(Composite mainPerspectivesComposite) {
-    this.mainPerspectivesComposite = mainPerspectivesComposite;
-  }
-
-  /**
-   * Gets perspectiveManager
-   *
-   * @return value of perspectiveManager
-   */
-  public HopPerspectiveManager getPerspectiveManager() {
-    return perspectiveManager;
-  }
-
-  /**
-   * @param perspectiveManager The perspectiveManager to set
-   */
-  public void setPerspectiveManager(HopPerspectiveManager perspectiveManager) {
-    this.perspectiveManager = perspectiveManager;
-  }
-
-  /**
-   * Gets the variables
-   *
-   * @return value of variables
-   */
-  public IVariables getVariables() {
-    return variables;
-  }
-
-  /**
-   * @param variables The variables to set
-   */
-  public void setVariables(IVariables variables) {
-    this.variables = variables;
-  }
-
-  /**
-   * Gets props
-   *
-   * @return value of props
-   */
-  public PropsUi getProps() {
-    return props;
-  }
-
-  /**
-   * @param props The props to set
-   */
-  public void setProps(PropsUi props) {
-    this.props = props;
-  }
-
-  /**
-   * Gets log
-   *
-   * @return value of log
-   */
-  public ILogChannel getLog() {
-    return log;
-  }
-
-  /**
-   * Gets mainMenu
-   *
-   * @return value of mainMenu
-   */
-  public Menu getMainMenu() {
-    return mainMenu;
-  }
-
-  /**
-   * @param mainMenu The mainMenu to set
-   */
-  public void setMainMenu(Menu mainMenu) {
-    this.mainMenu = mainMenu;
-  }
-
-  /**
-   * Gets mainToolbar
-   *
-   * @return value of mainToolbar
-   */
-  public ToolBar getMainToolbar() {
-    return mainToolbar;
-  }
-
-  /**
-   * @param mainToolbar The mainToolbar to set
-   */
-  public void setMainToolbar(ToolBar mainToolbar) {
-    this.mainToolbar = mainToolbar;
-  }
-
-  /**
-   * Gets perspectivesToolbar
-   *
-   * @return value of perspectivesToolbar
-   */
-  public ToolBar getPerspectivesToolbar() {
-    return perspectivesToolbar;
-  }
-
-  /**
-   * @param perspectivesToolbar The perspectivesToolbar to set
-   */
-  public void setPerspectivesToolbar(ToolBar perspectivesToolbar) {
-    this.perspectivesToolbar = perspectivesToolbar;
-  }
-
-  /**
-   * Gets mainHopGuiComposite
-   *
-   * @return value of mainHopGuiComposite
-   */
-  public Composite getMainHopGuiComposite() {
-    return mainHopGuiComposite;
-  }
-
-  /**
-   * @param mainHopGuiComposite The mainHopGuiComposite to set
-   */
-  public void setMainHopGuiComposite(Composite mainHopGuiComposite) {
-    this.mainHopGuiComposite = mainHopGuiComposite;
-  }
-
-  /**
    * Activates the given perspective.
    *
    * @param perspective The perspective to active
@@ -1613,7 +1492,7 @@ public class HopGui
   public void setActivePerspective(IHopPerspective perspective) {
 
     if (perspective == null) {
-      perspective = getDataOrchestrationPerspective();
+      perspective = getExplorerPerspective();
     }
 
     activePerspective = perspective;
@@ -1641,7 +1520,7 @@ public class HopGui
     //
     perspective.perspectiveActivated();
 
-    perspectiveManager.notifyPerspectiveActiviated(perspective);
+    perspectiveManager.notifyPerspectiveActivated(perspective);
   }
 
   public boolean isActivePerspective(IHopPerspective perspective) {
@@ -1715,62 +1594,52 @@ public class HopGui
    */
   public static HopGuiPipelineGraph getActivePipelineGraph() {
     IHopPerspective activePerspective = HopGui.getInstance().getActivePerspective();
-    if (!(activePerspective instanceof HopDataOrchestrationPerspective perspective)) {
-      return null;
+    if (activePerspective instanceof ExplorerPerspective perspective) {
+      IHopFileTypeHandler typeHandler = perspective.getActiveFileTypeHandler();
+      if (typeHandler instanceof HopGuiPipelineGraph pipelineGraph) {
+        return pipelineGraph;
+      }
     }
-    IHopFileTypeHandler typeHandler = perspective.getActiveFileTypeHandler();
-    if (!(typeHandler instanceof HopGuiPipelineGraph)) {
-      return null;
-    }
-    return (HopGuiPipelineGraph) typeHandler;
-  }
-
-  public static HopGuiWorkflowGraph getActiveWorkflowGraph() {
-    IHopPerspective activePerspective = HopGui.getInstance().getActivePerspective();
-    if (!(activePerspective instanceof HopDataOrchestrationPerspective perspective)) {
-      return null;
-    }
-    IHopFileTypeHandler typeHandler = perspective.getActiveFileTypeHandler();
-    if (!(typeHandler instanceof HopGuiWorkflowGraph)) {
-      return null;
-    }
-    return (HopGuiWorkflowGraph) typeHandler;
-  }
-
-  public static HopDataOrchestrationPerspective getDataOrchestrationPerspective() {
-    return (HopDataOrchestrationPerspective)
-        HopGui.getInstance()
-            .getPerspectiveManager()
-            .findPerspective(HopDataOrchestrationPerspective.class);
-  }
-
-  public static MetadataPerspective getMetadataPerspective() {
-    return (MetadataPerspective)
-        HopGui.getInstance().getPerspectiveManager().findPerspective(MetadataPerspective.class);
-  }
-
-  public static ExecutionPerspective getExecutionPerspective() {
-    return (ExecutionPerspective)
-        HopGui.getInstance().getPerspectiveManager().findPerspective(ExecutionPerspective.class);
-  }
-
-  public static ExplorerPerspective getExplorerPerspective() {
-    return (ExplorerPerspective)
-        HopGui.getInstance().getPerspectiveManager().findPerspective(ExplorerPerspective.class);
-  }
-
-  public static ConfigurationPerspective getConfigurationPerspective() {
-    return (ConfigurationPerspective)
-        HopGui.getInstance()
-            .getPerspectiveManager()
-            .findPerspective(ConfigurationPerspective.class);
+    return null;
   }
 
   /**
-   * Create a list of all the searcheables locations. By default this means HopGui, the the current
-   * metadata
+   * Convenience method to pick up the active workflow graph
    *
-   * @return
+   * @return The active workflow graph or null if none is active
+   */
+  public static HopGuiWorkflowGraph getActiveWorkflowGraph() {
+    IHopPerspective activePerspective = HopGui.getInstance().getActivePerspective();
+    if (activePerspective instanceof ExplorerPerspective perspective) {
+      IHopFileTypeHandler typeHandler = perspective.getActiveFileTypeHandler();
+      if (typeHandler instanceof HopGuiWorkflowGraph workflowGraph) {
+        return workflowGraph;
+      }
+    }
+    return null;
+  }
+
+  public static MetadataPerspective getMetadataPerspective() {
+    return HopGui.getInstance().getPerspectiveManager().findPerspective(MetadataPerspective.class);
+  }
+
+  public static ExecutionPerspective getExecutionPerspective() {
+    return HopGui.getInstance().getPerspectiveManager().findPerspective(ExecutionPerspective.class);
+  }
+
+  public static ExplorerPerspective getExplorerPerspective() {
+    return HopGui.getInstance().getPerspectiveManager().findPerspective(ExplorerPerspective.class);
+  }
+
+  public static ConfigurationPerspective getConfigurationPerspective() {
+    return HopGui.getInstance()
+        .getPerspectiveManager()
+        .findPerspective(ConfigurationPerspective.class);
+  }
+
+  /**
+   * Create a list of all the searcheables locations. By default this means HopGui, the current
+   * metadata
    */
   @Override
   public List<ISearchablesLocation> getSearchablesLocations() {
@@ -1820,178 +1689,5 @@ public class HopGui
   public void nextPerspective() {
     IHopPerspective perspective = getActivePerspective();
     getPerspectiveManager().showNextPerspective(perspective);
-  }
-
-  /**
-   * Gets databaseMetaManager
-   *
-   * @return value of databaseMetaManager
-   */
-  public MetadataManager<DatabaseMeta> getDatabaseMetaManager() {
-    return databaseMetaManager;
-  }
-
-  /**
-   * @param databaseMetaManager The databaseMetaManager to set
-   */
-  public void setDatabaseMetaManager(MetadataManager<DatabaseMeta> databaseMetaManager) {
-    this.databaseMetaManager = databaseMetaManager;
-  }
-
-  /**
-   * Gets partitionManager
-   *
-   * @return value of partitionManager
-   */
-  public MetadataManager<PartitionSchema> getPartitionManager() {
-    return partitionManager;
-  }
-
-  /**
-   * @param partitionManager The partitionManager to set
-   */
-  public void setPartitionManager(MetadataManager<PartitionSchema> partitionManager) {
-    this.partitionManager = partitionManager;
-  }
-
-  /**
-   * Gets fileDelegate
-   *
-   * @return value of fileDelegate
-   */
-  public HopGuiFileDelegate getFileDelegate() {
-    return fileDelegate;
-  }
-
-  /**
-   * @param fileDelegate The fileDelegate to set
-   */
-  public void setFileDelegate(HopGuiFileDelegate fileDelegate) {
-    this.fileDelegate = fileDelegate;
-  }
-
-  /**
-   * Gets undoDelegate
-   *
-   * @return value of undoDelegate
-   */
-  public HopGuiUndoDelegate getUndoDelegate() {
-    return undoDelegate;
-  }
-
-  /**
-   * @param undoDelegate The undoDelegate to set
-   */
-  public void setUndoDelegate(HopGuiUndoDelegate undoDelegate) {
-    this.undoDelegate = undoDelegate;
-  }
-
-  /**
-   * Gets activePerspective
-   *
-   * @return value of activePerspective
-   */
-  public IHopPerspective getActivePerspective() {
-    return activePerspective;
-  }
-
-  /**
-   * Gets loggingObject
-   *
-   * @return value of loggingObject
-   */
-  public ILoggingObject getLoggingObject() {
-    return loggingObject;
-  }
-
-  /**
-   * Gets mainMenuWidgets
-   *
-   * @return value of mainMenuWidgets
-   */
-  public GuiMenuWidgets getMainMenuWidgets() {
-    return mainMenuWidgets;
-  }
-
-  /**
-   * @param mainMenuWidgets The mainMenuWidgets to set
-   */
-  public void setMainMenuWidgets(GuiMenuWidgets mainMenuWidgets) {
-    this.mainMenuWidgets = mainMenuWidgets;
-  }
-
-  /**
-   * Gets mainToolbarWidgets
-   *
-   * @return value of mainToolbarWidgets
-   */
-  public GuiToolbarWidgets getMainToolbarWidgets() {
-    return mainToolbarWidgets;
-  }
-
-  /**
-   * @param mainToolbarWidgets The mainToolbarWidgets to set
-   */
-  public void setMainToolbarWidgets(GuiToolbarWidgets mainToolbarWidgets) {
-    this.mainToolbarWidgets = mainToolbarWidgets;
-  }
-
-  /**
-   * Gets openingLastFiles
-   *
-   * @return value of openingLastFiles
-   */
-  public boolean isOpeningLastFiles() {
-    return openingLastFiles;
-  }
-
-  /**
-   * @param openingLastFiles The openingLastFiles to set
-   */
-  public void setOpeningLastFiles(boolean openingLastFiles) {
-    this.openingLastFiles = openingLastFiles;
-  }
-
-  /**
-   * Gets the unique id of this HopGui instance
-   *
-   * @return value of id
-   */
-  public String getId() {
-    return id;
-  }
-
-  /**
-   * Gets eventsHandler
-   *
-   * @return value of eventsHandler
-   */
-  public HopGuiEventsHandler getEventsHandler() {
-    return eventsHandler;
-  }
-
-  /**
-   * @param eventsHandler The eventsHandler to set
-   */
-  public void setEventsHandler(HopGuiEventsHandler eventsHandler) {
-    this.eventsHandler = eventsHandler;
-  }
-
-  /**
-   * Gets reOpeningFiles
-   *
-   * @return value of reOpeningFiles
-   */
-  public boolean isReOpeningFiles() {
-    return reOpeningFiles;
-  }
-
-  /**
-   * Sets reOpeningFiles
-   *
-   * @param reOpeningFiles value of reOpeningFiles
-   */
-  public void setReOpeningFiles(boolean reOpeningFiles) {
-    this.reOpeningFiles = reOpeningFiles;
   }
 }

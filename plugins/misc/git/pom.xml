@@ -21,7 +21,7 @@
     <parent>
         <groupId>org.apache.hop</groupId>
         <artifactId>hop-plugins-misc</artifactId>
-        <version>2.15.0-SNAPSHOT</version>
+        <version>2.17.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>hop-misc-git</artifactId>
@@ -64,6 +64,12 @@
             <groupId>org.eclipse.jgit</groupId>
             <artifactId>org.eclipse.jgit.junit</artifactId>
             <version>${dependency.jgit.revision}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.vintage</groupId>
+            <artifactId>junit-vintage-engine</artifactId>
+            <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

@@ -18,8 +18,6 @@
 package org.apache.hop.mail.metadata;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.sun.mail.imap.IMAPSSLStore;
-import com.sun.mail.pop3.POP3SSLStore;
 import jakarta.mail.Flags;
 import jakarta.mail.Folder;
 import jakarta.mail.Message;
@@ -69,6 +67,8 @@ import org.apache.hop.metadata.api.HopMetadataBase;
 import org.apache.hop.metadata.api.HopMetadataProperty;
 import org.apache.hop.metadata.api.HopMetadataPropertyType;
 import org.apache.hop.metadata.api.IHopMetadata;
+import org.eclipse.angus.mail.imap.IMAPSSLStore;
+import org.eclipse.angus.mail.pop3.POP3SSLStore;
 
 @Getter
 @Setter
@@ -160,7 +160,6 @@ public class MailServerConnection extends HopMetadataBase implements IHopMetadat
   public static final int AFTER_GET_IMAP_DELETE = 1;
   public static final int AFTER_GET_IMAP_MOVE = 2;
 
-  //  private ILogChannel log;
   private Session session;
   private IVariables variables;
   private Properties props;
@@ -230,7 +229,6 @@ public class MailServerConnection extends HopMetadataBase implements IHopMetadat
   public MailServerConnection(IVariables variables) {
     this();
     this.variables = variables;
-    //    this.log = log;
   }
 
   public Session getSession(IVariables variables) {
@@ -240,9 +238,6 @@ public class MailServerConnection extends HopMetadataBase implements IHopMetadat
     if (protocol.equals("SMTP")) {
       // Send an e-mail...
       // create some properties and get the default Session
-      //      if (Utils.isEmpty(serverHost)) {
-      //        log.logError(BaseMessages.getString(PKG, "ActionMail.Error.HostNotSpecified"));
-      //      }
 
       protocol = "smtp";
       if (useSecureAuthentication) {
@@ -263,7 +258,8 @@ public class MailServerConnection extends HopMetadataBase implements IHopMetadat
           // javax.net.ssl.SSLException: Unsupported record version Unknown
           props.put("mail.smtps.quitwait", "false");
         }
-        props.put("mail.smtp.ssl.checkServerIdentity", isCheckServerIdentity());
+        props.setProperty(
+            "mail.smtp.ssl.checkServerIdentity", String.valueOf(isCheckServerIdentity()));
         if (!Utils.isEmpty(trustedHosts)) {
           props.put("mail.smtp.ssl.trust", variables.resolve(trustedHosts));
         }
@@ -290,8 +286,7 @@ public class MailServerConnection extends HopMetadataBase implements IHopMetadat
         props.setProperty("mail.pop3s.rsetbeforequit", "true");
         props.setProperty("mail.pop3.rsetbeforequit", "true");
       } else if (protocol.equals("MBOX")) {
-        props.setProperty(
-            "mstor.mbox.metadataStrategy", "none"); // mstor.mbox.metadataStrategy={none|xml|yaml}
+        props.setProperty("mstor.mbox.metadataStrategy", "none"); // none|xml|yaml
         props.setProperty("mstor.cache.disabled", "true"); // prevent diskstore fail
       }
 
@@ -313,7 +308,21 @@ public class MailServerConnection extends HopMetadataBase implements IHopMetadat
         }
       }
     }
-    session = Session.getInstance(props, null);
+    props.setProperty("mail.imap.ssl.checkServerIdentity", String.valueOf(isCheckServerIdentity()));
+    props.setProperty(
+        "mail.imaps.ssl.checkServerIdentity", String.valueOf(isCheckServerIdentity()));
+    props.setProperty("mail.pop3.ssl.checkServerIdentity", String.valueOf(isCheckServerIdentity()));
+    props.setProperty(
+        "mail.pop3s.ssl.checkServerIdentity", String.valueOf(isCheckServerIdentity()));
+    if (!Utils.isEmpty(trustedHosts)) {
+      String resolvedTrusted = variables.resolve(trustedHosts);
+      props.setProperty("mail.imap.ssl.trust", resolvedTrusted);
+      props.setProperty("mail.imaps.ssl.trust", resolvedTrusted);
+      props.setProperty("mail.pop3.ssl.trust", resolvedTrusted);
+      props.setProperty("mail.pop3s.ssl.trust", resolvedTrusted);
+    }
+
+    session = Session.getInstance(props);
 
     return session;
   }
@@ -345,7 +354,6 @@ public class MailServerConnection extends HopMetadataBase implements IHopMetadat
 
   // IMAP, POP, MBOX
   public Store getStore() throws MessagingException {
-    //    this.variables = variables;
     if (useSecureAuthentication && !protocol.equals("MBOX")) {
       URLName url =
           new URLName(
@@ -362,6 +370,7 @@ public class MailServerConnection extends HopMetadataBase implements IHopMetadat
           break;
         case "IMAP":
           store = new IMAPSSLStore(session, url);
+          break;
         default:
           break;
       }
@@ -376,7 +385,9 @@ public class MailServerConnection extends HopMetadataBase implements IHopMetadat
     return store;
   }
 
-  public MailServerConnection(MailServerConnection connection) {}
+  public MailServerConnection(MailServerConnection connection) {
+    // no impementation
+  }
 
   @Override
   public String toString() {
@@ -1134,7 +1145,7 @@ public class MailServerConnection extends HopMetadataBase implements IHopMetadat
 
       // The RFC2183 doesn't REQUIRE Content-Disposition header field so we'll create one to
       // fake out the code below.
-      if (disposition == null || disposition.length() < 1) {
+      if (Utils.isEmpty(disposition)) {
         disposition = Part.ATTACHMENT;
       }
 
@@ -1258,10 +1269,8 @@ public class MailServerConnection extends HopMetadataBase implements IHopMetadat
       String text = null;
       for (int i = 0; i < mp.getCount(); i++) {
         Part bp = mp.getBodyPart(i);
-        if (bp.isMimeType("text/plain")) {
-          if (text == null) {
-            text = getMessageBodyOrContentType(bp, returnContentType);
-          }
+        if (bp.isMimeType("text/plain") && text == null) {
+          text = getMessageBodyOrContentType(bp, returnContentType);
         }
       }
       return text;

@@ -610,7 +610,7 @@ public class ActionSftpPut extends ActionBase implements Cloneable, IAction {
 
     if (copyingPreviousFiles) {
       List<ResultFile> resultFiles = result.getResultFilesList();
-      if (resultFiles == null || resultFiles.isEmpty()) {
+      if (Utils.isEmpty(resultFiles)) {
         if (isDetailed()) {
           logDetailed(BaseMessages.getString(PKG, "ActionSftpPut.ArgsFromPreviousNothingFiles"));
         }
@@ -812,10 +812,8 @@ public class ActionSftpPut extends ActionBase implements Cloneable, IAction {
       }
 
       Pattern pattern = null;
-      if (!copyingPrevious && !copyingPreviousFiles) {
-        if (!Utils.isEmpty(realWildcard)) {
-          pattern = Pattern.compile(realWildcard);
-        }
+      if (!copyingPrevious && !copyingPreviousFiles && !Utils.isEmpty(realWildcard)) {
+        pattern = Pattern.compile(realWildcard);
       }
 
       int nrFilesSent = 0;

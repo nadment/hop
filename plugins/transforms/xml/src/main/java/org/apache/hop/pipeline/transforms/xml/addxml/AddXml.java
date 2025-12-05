@@ -23,7 +23,6 @@ import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.transform.OutputKeys;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerConfigurationException;
-import javax.xml.transform.TransformerException;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 import org.apache.hop.core.Const;
@@ -104,11 +103,11 @@ public class AddXml extends BaseTransform<AddXmlMeta, AddXmlData> {
         String value = formatField(v, valueData, outputField);
 
         String element = outputField.getElementName();
-        if (element == null || element.length() == 0) {
+        if (Utils.isEmpty(element)) {
           element = fieldname;
         }
 
-        if (element == null || element.length() == 0) {
+        if (Utils.isEmpty(element)) {
           throw new HopException("XML does not allow empty strings for element names.");
         }
         if (outputField.isAttribute()) {
@@ -116,7 +115,7 @@ public class AddXml extends BaseTransform<AddXmlMeta, AddXmlData> {
 
           Element node;
 
-          if (attributeParentName == null || attributeParentName.length() == 0) {
+          if (Utils.isEmpty(attributeParentName)) {
             node = root;
           } else {
             NodeList nodelist = root.getElementsByTagName(attributeParentName);
@@ -149,8 +148,6 @@ public class AddXml extends BaseTransform<AddXmlMeta, AddXmlData> {
     try {
       this.getSerializer().transform(domSource, new StreamResult(sw));
 
-    } catch (TransformerException e) {
-      throw new HopException(e);
     } catch (Exception e) {
       throw new HopException(e);
     }
@@ -271,9 +268,7 @@ public class AddXml extends BaseTransform<AddXmlMeta, AddXmlData> {
       if (meta.isOmitXMLheader()) {
         getSerializer().setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "yes");
       }
-    } catch (TransformerConfigurationException e) {
-      return false;
-    } catch (ParserConfigurationException e) {
+    } catch (TransformerConfigurationException | ParserConfigurationException e) {
       return false;
     }
 

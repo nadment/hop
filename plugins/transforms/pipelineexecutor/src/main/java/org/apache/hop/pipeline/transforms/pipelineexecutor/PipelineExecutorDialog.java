@@ -379,7 +379,7 @@ public class PipelineExecutorDialog extends BaseTransformDialog {
     return SwtSvgImageUtil.getImage(
         shell.getDisplay(),
         getClass().getClassLoader(),
-        "ui/images/pipelineexecutor.svg",
+        "pipelineexecutor.svg",
         ConstUi.LARGE_ICON_SIZE,
         ConstUi.LARGE_ICON_SIZE);
   }
@@ -397,7 +397,7 @@ public class PipelineExecutorDialog extends BaseTransformDialog {
 
     try {
       HopPipelineFileType<PipelineMeta> fileType =
-          HopGui.getDataOrchestrationPerspective().getPipelineFileType();
+          HopGui.getExplorerPerspective().getPipelineFileType();
       String filename =
           BaseDialog.presentFileDialog(
               shell,

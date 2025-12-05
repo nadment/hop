@@ -617,10 +617,10 @@ public class PGBulkLoaderDialog extends BaseTransformDialog {
 
     // show a confirm dialog if some missing field was found
     //
-    if (missingSourceFields.length() > 0 || missingTargetFields.length() > 0) {
+    if (!missingSourceFields.isEmpty() || !missingTargetFields.isEmpty()) {
 
       String message = "";
-      if (missingSourceFields.length() > 0) {
+      if (!missingSourceFields.isEmpty()) {
         message +=
             BaseMessages.getString(
                     PKG,
@@ -628,7 +628,7 @@ public class PGBulkLoaderDialog extends BaseTransformDialog {
                     missingSourceFields.toString())
                 + Const.CR;
       }
-      if (missingTargetFields.length() > 0) {
+      if (!missingTargetFields.isEmpty()) {
         message +=
             BaseMessages.getString(
                     PKG,
@@ -813,14 +813,14 @@ public class PGBulkLoaderDialog extends BaseTransformDialog {
   private void create() {
     try {
       PGBulkLoaderMeta info = new PGBulkLoaderMeta();
+      DatabaseMeta databaseMeta = pipelineMeta.findDatabase(wConnection.getText(), variables);
+      info.setMappings(new ArrayList<>());
       getInfo(info);
 
       String name = transformName; // new name might not yet be linked to other transforms!
-      TransformMeta transformMeta =
-          new TransformMeta(
-              BaseMessages.getString(PKG, "PGBulkLoaderDialog.TransformMeta.Title"), name, info);
+      TransformMeta transformMeta = pipelineMeta.findTransform(transformName);
+
       IRowMeta prev = pipelineMeta.getPrevTransformFields(variables, transformName);
-      DatabaseMeta databaseMeta = pipelineMeta.findDatabase(input.getConnection(), variables);
 
       SqlStatement sql =
           info.getSqlStatements(variables, pipelineMeta, transformMeta, prev, metadataProvider);

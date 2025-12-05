@@ -17,13 +17,15 @@
 
 package org.apache.hop.pipeline.transforms.xml.xslt;
 
+import static org.junit.jupiter.api.Assertions.fail;
+
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import junit.framework.TestCase;
+import org.apache.hop.core.HopClientEnvironment;
 import org.apache.hop.core.HopEnvironment;
 import org.apache.hop.core.RowMetaAndData;
 import org.apache.hop.core.exception.HopValueException;
@@ -34,6 +36,7 @@ import org.apache.hop.core.row.IRowMeta;
 import org.apache.hop.core.row.IValueMeta;
 import org.apache.hop.core.row.RowMeta;
 import org.apache.hop.core.row.value.ValueMetaString;
+import org.apache.hop.junit.rules.RestoreHopEnvironmentExtension;
 import org.apache.hop.pipeline.Pipeline;
 import org.apache.hop.pipeline.PipelineHopMeta;
 import org.apache.hop.pipeline.PipelineMeta;
@@ -44,8 +47,12 @@ import org.apache.hop.pipeline.transform.TransformMeta;
 import org.apache.hop.pipeline.transforms.dummy.DummyMeta;
 import org.apache.hop.pipeline.transforms.injector.InjectorMeta;
 import org.apache.hop.pipeline.transforms.xml.RowTransformCollector;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
-public class XsltTest extends TestCase {
+@ExtendWith(RestoreHopEnvironmentExtension.class)
+class XsltTest {
 
   private static final String TEST1_XML =
       "<?xml version=\"1.0\" encoding=\"UTF-8\"?><message>Yep, it worked!</message>";
@@ -61,6 +68,11 @@ public class XsltTest extends TestCase {
           + "</xsl:stylesheet>";
 
   private static final String TEST1_FNAME = "template.xsl";
+
+  @BeforeEach
+  public void init() throws Exception {
+    HopClientEnvironment.init();
+  }
 
   /**
    * Write the file to be used as input (as a temporary file).
@@ -191,7 +203,8 @@ public class XsltTest extends TestCase {
    *
    * @throws Exception Upon any exception
    */
-  public void testXslt1() throws Exception {
+  @Test
+  void testXslt1() throws Exception {
 
     String fileName = writeInputFile();
     runTestWithParams("XML", "result", true, true, "filename", fileName, "JAXP");
@@ -202,7 +215,8 @@ public class XsltTest extends TestCase {
    *
    * @throws Exception Upon any exception
    */
-  public void testXslt2() throws Exception {
+  @Test
+  void testXslt2() throws Exception {
 
     String fileName = writeInputFile();
     runTestWithParams("XML", "result", true, true, "filename", fileName, "SAXON");
@@ -213,7 +227,8 @@ public class XsltTest extends TestCase {
    *
    * @throws Exception Upon any exception
    */
-  public void testXslt3() throws Exception {
+  @Test
+  void testXslt3() throws Exception {
     runTestWithParams("XML", "result", true, false, "XSL", "", "JAXP");
   }
 
@@ -222,7 +237,8 @@ public class XsltTest extends TestCase {
    *
    * @throws Exception Upon any exception
    */
-  public void testXslt4() throws Exception {
+  @Test
+  void testXslt4() throws Exception {
     runTestWithParams("XML", "result", true, false, "XSL", "", "SAXON");
   }
 
@@ -231,7 +247,8 @@ public class XsltTest extends TestCase {
    *
    * @throws Exception Upon any exception
    */
-  public void testXslt5() throws Exception {
+  @Test
+  void testXslt5() throws Exception {
     String fileName = writeInputFile();
     runTestWithParams("XML", "result", false, false, "filename", fileName, "JAXP");
   }
@@ -241,7 +258,8 @@ public class XsltTest extends TestCase {
    *
    * @throws Exception Upon any exception
    */
-  public void testXslt6() throws Exception {
+  @Test
+  void testXslt6() throws Exception {
     String fileName = writeInputFile();
     runTestWithParams("XML", "result", false, false, "filename", fileName, "SAXON");
   }

@@ -24,6 +24,7 @@ import org.apache.hop.core.logging.LogChannel;
 import org.apache.hop.core.util.Utils;
 import org.apache.hop.core.variables.IVariables;
 import org.apache.hop.i18n.BaseMessages;
+import org.apache.hop.ui.core.FormDataBuilder;
 import org.apache.hop.ui.core.PropsUi;
 import org.apache.hop.ui.core.dialog.BaseDialog;
 import org.apache.hop.ui.core.dialog.MessageBox;
@@ -57,45 +58,25 @@ public class ActionFtpPutDialog extends ActionDialog {
   private static final Class<?> PKG = ActionFtpPut.class;
 
   private Text wName;
-
   private TextVar wServerName;
-
   private TextVar wServerPort;
-
   private TextVar wUserName;
-
   private TextVar wPassword;
-
   private TextVar wLocalDirectory;
-
   private TextVar wRemoteDirectory;
-
   private TextVar wWildcard;
-
   private Button wRemove;
-
   private ActionFtpPut action;
-
   private boolean changed;
-
   private Button wBinaryMode;
-
   private TextVar wTimeout;
-
   private Button wOnlyNew;
-
   private Button wActive;
-
   private Combo wControlEncoding;
-
   private LabelTextVar wProxyPort;
-
   private LabelTextVar wProxyUsername;
-
   private LabelTextVar wProxyPassword;
-
   private LabelTextVar wProxyHost;
-
   private LabelTextVar wSocksProxyHost;
   private LabelTextVar wSocksProxyPort;
   private LabelTextVar wSocksProxyUsername;
@@ -156,11 +137,8 @@ public class ActionFtpPutDialog extends ActionDialog {
     wName = new Text(shell, SWT.SINGLE | SWT.LEFT | SWT.BORDER);
     PropsUi.setLook(wName);
     wName.addModifyListener(lsMod);
-    FormData fdName = new FormData();
-    fdName.left = new FormAttachment(middle, 0);
-    fdName.top = new FormAttachment(0, margin);
-    fdName.right = new FormAttachment(100, 0);
-    wName.setLayoutData(fdName);
+    wName.setLayoutData(
+        FormDataBuilder.builder().left(middle, 0).top(0, margin).right(100, 0).build());
 
     // The buttons at the bottom
     //
@@ -460,11 +438,12 @@ public class ActionFtpPutDialog extends ActionDialog {
         BaseMessages.getString(PKG, "ActionFtpPut.ControlEncoding.Tooltip"));
     wControlEncoding.setItems(encodings);
     PropsUi.setLook(wControlEncoding);
-    FormData fdControlEncoding = new FormData();
-    fdControlEncoding.left = new FormAttachment(middle, 0);
-    fdControlEncoding.top = new FormAttachment(wlControlEncoding, 0, SWT.CENTER);
-    fdControlEncoding.right = new FormAttachment(100, 0);
-    wControlEncoding.setLayoutData(fdControlEncoding);
+    wControlEncoding.setLayoutData(
+        FormDataBuilder.builder()
+            .left(middle, 0)
+            .top(wlControlEncoding, 0, SWT.CENTER)
+            .right(100, 0)
+            .build());
 
     FormData fdAdvancedSettings = new FormData();
     fdAdvancedSettings.left = new FormAttachment(0, margin);
@@ -847,16 +826,13 @@ public class ActionFtpPutDialog extends ActionDialog {
     closeFtpConnection();
   }
 
-  private void checkRemoteFolder(String remoteFoldername) {
-    if (!Utils.isEmpty(remoteFoldername)) {
-      if (connectToFtp(true, remoteFoldername)) {
-        MessageBox mb = new MessageBox(shell, SWT.OK | SWT.ICON_INFORMATION);
-        mb.setMessage(
-            BaseMessages.getString(PKG, "ActionFtpPut.FolderExists.OK", remoteFoldername)
-                + Const.CR);
-        mb.setText(BaseMessages.getString(PKG, "ActionFtpPut.FolderExists.Title.Ok"));
-        mb.open();
-      }
+  private void checkRemoteFolder(String remoteFolderName) {
+    if (!Utils.isEmpty(remoteFolderName) && connectToFtp(true, remoteFolderName)) {
+      MessageBox mb = new MessageBox(shell, SWT.OK | SWT.ICON_INFORMATION);
+      mb.setMessage(
+          BaseMessages.getString(PKG, "ActionFtpPut.FolderExists.OK", remoteFolderName) + Const.CR);
+      mb.setText(BaseMessages.getString(PKG, "ActionFtpPut.FolderExists.Title.Ok"));
+      mb.open();
     }
   }
 
@@ -930,7 +906,7 @@ public class ActionFtpPutDialog extends ActionDialog {
     wRemoteDirectory.setText(Const.NVL(action.getRemoteDirectory(), ""));
     wLocalDirectory.setText(Const.NVL(action.getLocalDirectory(), ""));
     wWildcard.setText(Const.NVL(action.getWildcard(), ""));
-    wRemove.setSelection(action.getRemove());
+    wRemove.setSelection(action.isRemove());
     wBinaryMode.setSelection(action.isBinaryMode());
     wTimeout.setText("" + action.getTimeout());
     wOnlyNew.setSelection(action.isOnlyPuttingNewFiles());

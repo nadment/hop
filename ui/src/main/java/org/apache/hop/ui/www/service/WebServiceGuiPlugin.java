@@ -104,7 +104,9 @@ public class WebServiceGuiPlugin {
                   transformMeta.getName(),
                   fieldName,
                   "text/plain",
+                  null,
                   false,
+                  null,
                   null,
                   null);
           manager.newMetadata(webService);
@@ -157,7 +159,7 @@ public class WebServiceGuiPlugin {
           //
           editor.setChanged();
 
-          // Switch to the editor...
+          // Switch to the perspective
           //
           perspective.activate();
 

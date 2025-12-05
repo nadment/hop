@@ -283,7 +283,7 @@ public class CombinationLookupMeta
         }
 
         // Look up fields in the input stream <prev>
-        if (prev != null && prev.size() > 0) {
+        if (prev != null && !prev.isEmpty()) {
           boolean first = true;
           errorMessage = "";
           boolean errorFound = false;
@@ -353,20 +353,18 @@ public class CombinationLookupMeta
           }
         }
 
-        if (techKeyCreation != null) {
+        if (techKeyCreation != null
+            && (!(CREATION_METHOD_AUTOINC.equals(techKeyCreation)
+                || CREATION_METHOD_SEQUENCE.equals(techKeyCreation)
+                || CREATION_METHOD_TABLEMAX.equals(techKeyCreation)))) {
           // post 2.2 version
-          if (!(CREATION_METHOD_AUTOINC.equals(techKeyCreation)
-              || CREATION_METHOD_SEQUENCE.equals(techKeyCreation)
-              || CREATION_METHOD_TABLEMAX.equals(techKeyCreation))) {
-            errorMessage +=
-                BaseMessages.getString(
-                        PKG, "CombinationLookupMeta.CheckResult.ErrorTechKeyCreation")
-                    + ": "
-                    + techKeyCreation
-                    + "!";
-            cr = new CheckResult(ICheckResult.TYPE_RESULT_ERROR, errorMessage, transformMeta);
-            remarks.add(cr);
-          }
+          errorMessage +=
+              BaseMessages.getString(PKG, "CombinationLookupMeta.CheckResult.ErrorTechKeyCreation")
+                  + ": "
+                  + techKeyCreation
+                  + "!";
+          cr = new CheckResult(ICheckResult.TYPE_RESULT_ERROR, errorMessage, transformMeta);
+          remarks.add(cr);
         }
       } catch (HopException e) {
         errorMessage =
@@ -416,7 +414,7 @@ public class CombinationLookupMeta
     int i;
 
     if (databaseMeta != null) {
-      if (prev != null && prev.size() > 0) {
+      if (prev != null && !prev.isEmpty()) {
         if (!Utils.isEmpty(tableName)) {
           String schemaTable =
               databaseMeta.getQuotedSchemaTableCombination(variables, schemaName, tableName);
@@ -475,7 +473,7 @@ public class CombinationLookupMeta
                       || (doHash && name.equals(vhashfield.getName()))) {
                     errorField += name;
                   }
-                  if (errorField.length() > 0) {
+                  if (!errorField.isEmpty()) {
                     retval.setError(
                         BaseMessages.getString(
                             PKG, "CombinationLookupMeta.ReturnValue.NameCollision", errorField));
@@ -548,7 +546,7 @@ public class CombinationLookupMeta
                     fields,
                     (CREATION_METHOD_SEQUENCE.equals(technicalKeyField)
                             && sequenceFrom != null
-                            && sequenceFrom.length() != 0)
+                            && !sequenceFrom.isEmpty())
                         ? null
                         : technicalKeyField,
                     CREATION_METHOD_AUTOINC.equals(technicalKeyField),
@@ -565,7 +563,7 @@ public class CombinationLookupMeta
             String crUniqIndex = "";
             String[] idxFields = null;
             if (useHash) {
-              if (hashField != null && hashField.length() > 0) {
+              if (!Utils.isEmpty(hashField)) {
                 idxFields = new String[] {hashField};
               } else {
                 retval.setError(
@@ -618,11 +616,11 @@ public class CombinationLookupMeta
             // Don't forget the sequence (optional)
             //
             String crSeq = "";
-            if (databaseMeta.supportsSequences() && !Utils.isEmpty(sequenceFrom)) {
-              if (!db.checkSequenceExists(schemaName, sequenceFrom)) {
-                crSeq += db.getCreateSequenceStatement(schemaName, sequenceFrom, 1L, 1L, -1L, true);
-                crSeq += Const.CR;
-              }
+            if (databaseMeta.supportsSequences()
+                && !Utils.isEmpty(sequenceFrom)
+                && !db.checkSequenceExists(schemaName, sequenceFrom)) {
+              crSeq += db.getCreateSequenceStatement(schemaName, sequenceFrom, 1L, 1L, -1L, true);
+              crSeq += Const.CR;
             }
             retval.setSql(variables.resolve(crTable + crUniqIndex + crIndex + crSeq));
           } catch (HopException e) {

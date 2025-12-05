@@ -344,7 +344,13 @@ public interface IValueMeta extends Cloneable {
     try {
       return typeCodes[type];
     } catch (Exception e) {
-      return "unknown/illegal";
+      // consult plugin registry
+      try {
+        String pluginType = ValueMetaFactory.getValueMetaName(type);
+        return pluginType.equals("-") ? "unknown/illegal" : pluginType;
+      } catch (Exception ignore) {
+        return "unknown/illegal";
+      }
     }
   }
 
@@ -990,6 +996,13 @@ public interface IValueMeta extends Cloneable {
    * @return true if the value is either of type Number or Integer
    */
   boolean isNumeric();
+
+  /**
+   * Checks whether this Value is Json
+   *
+   * @return true if the value is Json
+   */
+  boolean isJson();
 
   /**
    * Return the type of a value in a textual form: "String", "Number", "Integer", "Boolean", "Date",

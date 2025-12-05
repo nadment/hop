@@ -39,6 +39,7 @@ import javax.xml.transform.sax.TransformerHandler;
 import javax.xml.transform.stream.StreamResult;
 import org.apache.hop.core.exception.HopException;
 import org.apache.hop.core.logging.ILogChannel;
+import org.apache.hop.core.util.Utils;
 import org.apache.hop.core.variables.IVariables;
 import org.apache.tika.Tika;
 import org.apache.tika.config.TikaConfig;
@@ -260,10 +261,8 @@ public class TikaOutput {
       // fix for TIKA-596: if a parser doesn't generate
       // XHTML output, the lack of an output document prevents
       // metadata from being output: this fixes that
-      if (handler instanceof NoDocumentMetHandler metHandler) {
-        if (!metHandler.metOutput()) {
-          metHandler.endDocument();
-        }
+      if (handler instanceof NoDocumentMetHandler metHandler && !metHandler.metOutput()) {
+        metHandler.endDocument();
       }
     }
 
@@ -348,7 +347,7 @@ public class TikaOutput {
           writer.print(", ");
         }
 
-        if (value == null || value.length() == 0) {
+        if (Utils.isEmpty(value)) {
           writer.print("null");
         } else {
           // Is it a number?

@@ -117,10 +117,8 @@ public class Mail extends BaseTransform<MailMeta, MailData> {
       }
 
       // Check is SMTP server is provided
-      if (StringUtils.isEmpty(meta.getConnectionName())) {
-        if (Utils.isEmpty(meta.getServer())) {
-          throw new HopException(BaseMessages.getString(PKG, "Mail.Log.ServerFieldEmpty"));
-        }
+      if (StringUtils.isEmpty(meta.getConnectionName()) && Utils.isEmpty(meta.getServer())) {
+        throw new HopException(BaseMessages.getString(PKG, "Mail.Log.ServerFieldEmpty"));
       }
 
       // Check Attached filenames when dynamic
@@ -129,29 +127,28 @@ public class Mail extends BaseTransform<MailMeta, MailData> {
       }
 
       // Check Attached zipfilename when dynamic
-      if (meta.isZipFilenameDynamic() && Utils.isEmpty(meta.getDynamicZipFilename())) {
-        throw new HopException(
-            BaseMessages.getString(PKG, "Mail.Log.DynamicZipFilenameFieldEmpty"));
-      }
-
-      if (meta.isZipFiles() && Utils.isEmpty(meta.getZipFilename())) {
-        throw new HopException(BaseMessages.getString(PKG, "Mail.Log.ZipFilenameEmpty"));
+      if (meta.isZipFiles()) {
+        if (meta.isZipFilenameDynamic() && Utils.isEmpty(meta.getDynamicZipFilename())) {
+          throw new HopException(
+              BaseMessages.getString(PKG, "Mail.Log.DynamicZipFilenameFieldEmpty"));
+        }
+        if (!meta.isZipFilenameDynamic() && Utils.isEmpty(meta.getZipFilename())) {
+          throw new HopException(BaseMessages.getString(PKG, "Mail.Log.ZipFilenameEmpty"));
+        }
       }
 
       // check authentication
-      if (StringUtils.isEmpty(meta.getConnectionName())) {
-        if (meta.isUsingAuthentication()) {
-          // check authentication user
-          if (Utils.isEmpty(meta.getAuthenticationUser())) {
-            throw new HopException(
-                BaseMessages.getString(PKG, "Mail.Log.AuthenticationUserFieldEmpty"));
-          }
+      if (StringUtils.isEmpty(meta.getConnectionName()) && meta.isUsingAuthentication()) {
+        // check authentication user
+        if (Utils.isEmpty(meta.getAuthenticationUser())) {
+          throw new HopException(
+              BaseMessages.getString(PKG, "Mail.Log.AuthenticationUserFieldEmpty"));
+        }
 
-          // check authentication pass
-          if (Utils.isEmpty(meta.getAuthenticationPassword())) {
-            throw new HopException(
-                BaseMessages.getString(PKG, "Mail.Log.AuthenticationPasswordFieldEmpty"));
-          }
+        // check authentication pass
+        if (Utils.isEmpty(meta.getAuthenticationPassword())) {
+          throw new HopException(
+              BaseMessages.getString(PKG, "Mail.Log.AuthenticationPasswordFieldEmpty"));
         }
       }
 
@@ -255,60 +252,55 @@ public class Mail extends BaseTransform<MailMeta, MailData> {
       }
 
       // cache the position of the Server field
-      if (StringUtils.isEmpty(meta.getConnectionName())) {
+      if (StringUtils.isEmpty(meta.getConnectionName()) && data.indexOfServer < 0) {
+        String realServer = meta.getServer();
+        data.indexOfServer = data.previousRowMeta.indexOfValue(realServer);
         if (data.indexOfServer < 0) {
-          String realServer = meta.getServer();
-          data.indexOfServer = data.previousRowMeta.indexOfValue(realServer);
-          if (data.indexOfServer < 0) {
-            throw new HopException(
-                BaseMessages.getString(PKG, "Mail.Exception.CouldnotFindServerField", realServer));
-          }
+          throw new HopException(
+              BaseMessages.getString(PKG, "Mail.Exception.CouldnotFindServerField", realServer));
         }
       }
 
       // Port
-      if (StringUtils.isEmpty(meta.getConnectionName())) {
-        if (!Utils.isEmpty(meta.getPort()) && data.indexOfPort < 0) {
-          // cache the position of the port field
-
-          String realPort = meta.getPort();
-          data.indexOfPort = data.previousRowMeta.indexOfValue(realPort);
-          if (data.indexOfPort < 0) {
-            throw new HopException(
-                BaseMessages.getString(PKG, "Mail.Exception.CouldnotFindPortField", realPort));
-          }
+      if (StringUtils.isEmpty(meta.getConnectionName())
+          && !Utils.isEmpty(meta.getPort())
+          && data.indexOfPort < 0) {
+        // cache the position of the port field
+        String realPort = meta.getPort();
+        data.indexOfPort = data.previousRowMeta.indexOfValue(realPort);
+        if (data.indexOfPort < 0) {
+          throw new HopException(
+              BaseMessages.getString(PKG, "Mail.Exception.CouldnotFindPortField", realPort));
         }
       }
 
       // Authentication
-      if (StringUtils.isEmpty(meta.getConnectionName())) {
-        if (meta.isUsingAuthentication()) {
-          // cache the position of the Authentication user field
+      if (StringUtils.isEmpty(meta.getConnectionName()) && meta.isUsingAuthentication()) {
+        // cache the position of the Authentication user field
+        if (data.indexOfAuthenticationUser < 0) {
+          String realAuthenticationUser = meta.getAuthenticationUser();
+          data.indexOfAuthenticationUser =
+              data.previousRowMeta.indexOfValue(realAuthenticationUser);
           if (data.indexOfAuthenticationUser < 0) {
-            String realAuthenticationUser = meta.getAuthenticationUser();
-            data.indexOfAuthenticationUser =
-                data.previousRowMeta.indexOfValue(realAuthenticationUser);
-            if (data.indexOfAuthenticationUser < 0) {
-              throw new HopException(
-                  BaseMessages.getString(
-                      PKG,
-                      "Mail.Exception.CouldnotFindAuthenticationUserField",
-                      realAuthenticationUser));
-            }
+            throw new HopException(
+                BaseMessages.getString(
+                    PKG,
+                    "Mail.Exception.CouldnotFindAuthenticationUserField",
+                    realAuthenticationUser));
           }
+        }
 
-          // cache the position of the Authentication password field
+        // cache the position of the Authentication password field
+        if (data.indexOfAuthenticationPass < 0) {
+          String realAuthenticationPassword = meta.getAuthenticationPassword();
+          data.indexOfAuthenticationPass =
+              data.previousRowMeta.indexOfValue(realAuthenticationPassword);
           if (data.indexOfAuthenticationPass < 0) {
-            String realAuthenticationPassword = meta.getAuthenticationPassword();
-            data.indexOfAuthenticationPass =
-                data.previousRowMeta.indexOfValue(realAuthenticationPassword);
-            if (data.indexOfAuthenticationPass < 0) {
-              throw new HopException(
-                  BaseMessages.getString(
-                      PKG,
-                      "Mail.Exception.CouldnotFindAuthenticationPassField",
-                      realAuthenticationPassword));
-            }
+            throw new HopException(
+                BaseMessages.getString(
+                    PKG,
+                    "Mail.Exception.CouldnotFindAuthenticationPassField",
+                    realAuthenticationPassword));
           }
         }
       }
@@ -427,7 +419,7 @@ public class Mail extends BaseTransform<MailMeta, MailData> {
       }
 
       // check embedded images
-      if (meta.getEmbeddedImages() != null && meta.getEmbeddedImages().size() > 0) {
+      if (!Utils.isEmpty(meta.getEmbeddedImages())) {
         FileObject image = null;
         data.embeddedMimePart = new HashSet<>();
         try {
@@ -519,18 +511,14 @@ public class Mail extends BaseTransform<MailMeta, MailData> {
           port = Const.toInt("" + data.previousRowMeta.getInteger(r, data.indexOfPort), -1);
         }
 
-        if (StringUtils.isEmpty(meta.getConnectionName())) {
-          if (data.indexOfAuthenticationUser > -1) {
-            authuser = data.previousRowMeta.getString(r, data.indexOfAuthenticationUser);
-          }
+        if (StringUtils.isEmpty(meta.getConnectionName()) && data.indexOfAuthenticationUser > -1) {
+          authuser = data.previousRowMeta.getString(r, data.indexOfAuthenticationUser);
         }
 
-        if (StringUtils.isEmpty(meta.getConnectionName())) {
-          if (data.indexOfAuthenticationPass > -1) {
-            authpass =
-                Utils.resolvePassword(
-                    variables, data.previousRowMeta.getString(r, data.indexOfAuthenticationPass));
-          }
+        if (StringUtils.isEmpty(meta.getConnectionName()) && data.indexOfAuthenticationPass > -1) {
+          authpass =
+              Utils.resolvePassword(
+                  variables, data.previousRowMeta.getString(r, data.indexOfAuthenticationPass));
         }
       }
 
@@ -1055,7 +1043,7 @@ public class Mail extends BaseTransform<MailMeta, MailData> {
 
   private void addImagePart() throws Exception {
     data.nrEmbeddedImages = 0;
-    if (data.embeddedMimePart != null && !data.embeddedMimePart.isEmpty()) {
+    if (!Utils.isEmpty(data.embeddedMimePart)) {
       for (Iterator<MimeBodyPart> i = data.embeddedMimePart.iterator(); i.hasNext(); ) {
         MimeBodyPart part = i.next();
         data.parts.addBodyPart(part);

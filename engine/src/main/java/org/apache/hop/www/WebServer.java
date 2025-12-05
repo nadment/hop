@@ -17,20 +17,21 @@
 
 package org.apache.hop.www;
 
+import jakarta.servlet.Servlet;
 import java.awt.GraphicsEnvironment;
 import java.io.BufferedReader;
-import java.io.File;
 import java.io.InputStreamReader;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.ArrayList;
 import java.util.List;
-import javax.servlet.Servlet;
+import lombok.Getter;
+import lombok.Setter;
 import org.apache.hop.core.Const;
 import org.apache.hop.core.HopEnvironment;
 import org.apache.hop.core.encryption.Encr;
 import org.apache.hop.core.exception.HopException;
+import org.apache.hop.core.exception.HopPluginException;
 import org.apache.hop.core.extension.ExtensionPointHandler;
 import org.apache.hop.core.extension.HopExtensionPoint;
 import org.apache.hop.core.logging.ILogChannel;
@@ -42,31 +43,32 @@ import org.apache.hop.core.variables.IVariables;
 import org.apache.hop.core.variables.Variables;
 import org.apache.hop.i18n.BaseMessages;
 import org.apache.hop.server.HopServerMeta;
+import org.eclipse.jetty.ee11.servlet.DefaultServlet;
+import org.eclipse.jetty.ee11.servlet.ServletContextHandler;
+import org.eclipse.jetty.ee11.servlet.ServletHolder;
+import org.eclipse.jetty.ee11.servlet.security.ConstraintMapping;
+import org.eclipse.jetty.ee11.servlet.security.ConstraintSecurityHandler;
 import org.eclipse.jetty.http.HttpVersion;
 import org.eclipse.jetty.jaas.JAASLoginService;
-import org.eclipse.jetty.security.ConstraintMapping;
-import org.eclipse.jetty.security.ConstraintSecurityHandler;
+import org.eclipse.jetty.security.Authenticator;
+import org.eclipse.jetty.security.Constraint;
 import org.eclipse.jetty.security.HashLoginService;
 import org.eclipse.jetty.security.PropertyUserStore;
 import org.eclipse.jetty.security.UserStore;
-import org.eclipse.jetty.server.ConnectionLimit;
 import org.eclipse.jetty.server.Connector;
 import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.HttpConfiguration;
 import org.eclipse.jetty.server.HttpConnectionFactory;
 import org.eclipse.jetty.server.LowResourceMonitor;
+import org.eclipse.jetty.server.NetworkConnectionLimit;
 import org.eclipse.jetty.server.SecureRequestCustomizer;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.server.SslConnectionFactory;
 import org.eclipse.jetty.server.handler.ContextHandlerCollection;
-import org.eclipse.jetty.server.handler.HandlerList;
 import org.eclipse.jetty.server.handler.ResourceHandler;
-import org.eclipse.jetty.servlet.DefaultServlet;
-import org.eclipse.jetty.servlet.ServletContextHandler;
-import org.eclipse.jetty.servlet.ServletHolder;
-import org.eclipse.jetty.util.resource.PathResource;
-import org.eclipse.jetty.util.security.Constraint;
+import org.eclipse.jetty.util.resource.Resource;
+import org.eclipse.jetty.util.resource.ResourceFactory;
 import org.eclipse.jetty.util.security.Password;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.glassfish.jersey.servlet.ServletContainer;
@@ -78,19 +80,26 @@ public class WebServer {
   private static final int DEFAULT_DETECTION_TIMER = 20000;
   private static final Class<?> PKG = WebServer.class;
   public static final String CONST_WEB_SERVER_LOG_CONFIG_OPTIONS = "WebServer.Log.ConfigOptions";
-  private ILogChannel log;
-  private IVariables variables;
-  private Server server;
+  @Getter @Setter private ILogChannel log;
 
-  private PipelineMap pipelineMap;
-  private WorkflowMap workflowMap;
+  /** value of variables */
+  @Setter @Getter private IVariables variables;
 
-  private String hostname;
-  private int port;
+  @Getter @Setter private Server server;
+  @Getter @Setter private PipelineMap pipelineMap;
+  @Setter @Getter private WorkflowMap workflowMap;
+
+  /** the hostname */
+  @Setter @Getter private String hostname;
+
+  @Setter @Getter private int port;
   private final int shutdownPort;
 
   private String passwordFile;
   private final WebServerShutdownHook webServerShutdownHook;
+
+  /** Can be used to override the default shutdown behavior of performing a System.exit */
+  @Setter
   private IWebServerShutdownHandler webServerShutdownHandler =
       new DefaultWebServerShutdownHandler();
 
@@ -178,90 +187,102 @@ public class WebServer {
     this(log, pipelineMap, workflowMap, hostname, port, shutdownPort, join, null, null);
   }
 
-  public Server getServer() {
-    return server;
-  }
-
-  public void setServer(Server server) {
-    this.server = server;
-  }
-
   public void startServer() throws Exception {
     server = new Server();
+    HopServerMeta hopServer = pipelineMap.getHopServerConfig().getHopServer();
 
-    List<String> roles = new ArrayList<>();
-    roles.add(Constraint.ANY_ROLE);
+    Handler innerHandler;
 
-    // Set up the security handler, optionally with JAAS
-    //
-    ConstraintSecurityHandler securityHandler = new ConstraintSecurityHandler();
+    if (hopServer.isEnableAuth()) {
+      Constraint.Builder constraintBuilder =
+          new Constraint.Builder()
+              .name(Authenticator.BASIC_AUTH)
+              .authorization(Constraint.Authorization.SPECIFIC_ROLE)
+              .transport(Constraint.Transport.ANY);
 
-    if (System.getProperty("loginmodulename") != null
-        && System.getProperty("java.security.auth.login.config") != null) {
-      JAASLoginService jaasLoginService = new JAASLoginService("Hop");
-      jaasLoginService.setLoginModuleName(System.getProperty("loginmodulename"));
-      securityHandler.setLoginService(jaasLoginService);
-    } else {
-      roles.add("default");
-      HashLoginService hashLoginService;
-      HopServerMeta hopServer = pipelineMap.getHopServerConfig().getHopServer();
-      if (!Utils.isEmpty(hopServer.getPassword())) {
-        hashLoginService = new HashLoginService("Hop");
-        UserStore userStore = new UserStore();
-        userStore.addUser(
-            hopServer.getUsername(),
-            new Password(hopServer.getPassword()),
-            new String[] {"default"});
-        hashLoginService.setUserStore(userStore);
+      ConstraintSecurityHandler securityHandler = new ConstraintSecurityHandler();
+      securityHandler.setAuthenticationType(Authenticator.BASIC_AUTH);
+
+      // basic authentication
+      if (System.getProperty("loginmodulename") != null
+          && System.getProperty("java.security.auth.login.config") != null) {
+        constraintBuilder.roles("*");
+        JAASLoginService jaasLoginService = new JAASLoginService("Hop");
+        jaasLoginService.setLoginModuleName(System.getProperty("loginmodulename"));
+        securityHandler.setLoginService(jaasLoginService);
       } else {
-        // See if there is a hop.pwd file in the HOP_HOME directory:
-        if (Utils.isEmpty(passwordFile)) {
-          passwordFile = Const.getHopLocalServerPasswordFile();
+        constraintBuilder.roles("default");
+        HashLoginService hashLoginService;
+        if (!Utils.isEmpty(hopServer.getPassword())) {
+          hashLoginService = new HashLoginService("Hop");
+          UserStore userStore = new UserStore();
+          userStore.addUser(
+              hopServer.getUsername(),
+              new Password(hopServer.getPassword()),
+              new String[] {"default"});
+          hashLoginService.setUserStore(userStore);
+        } else {
+          if (Utils.isEmpty(passwordFile)) {
+            passwordFile = Const.getHopLocalServerPasswordFile();
+          }
+          hashLoginService = new HashLoginService("Hop");
+          PropertyUserStore userStore = new PropertyUserStore();
+          userStore.setConfig(ResourceFactory.of(server).newResource(passwordFile));
+          hashLoginService.setUserStore(userStore);
         }
-        hashLoginService = new HashLoginService("Hop");
-        PropertyUserStore userStore = new PropertyUserStore();
-        userStore.setConfig(passwordFile);
-        hashLoginService.setUserStore(userStore);
+        securityHandler.setLoginService(hashLoginService);
       }
-      securityHandler.setLoginService(hashLoginService);
+
+      ConstraintMapping constraintMapping = new ConstraintMapping();
+      constraintMapping.setPathSpec("/*");
+      constraintMapping.setConstraint(constraintBuilder.build());
+      securityHandler.setConstraintMappings(new ConstraintMapping[] {constraintMapping});
+
+      // create context handler collection
+      ContextHandlerCollection contexts = createContexts();
+      ResourceHandler resourceHandler = new ResourceHandler();
+      resourceHandler.setBaseResourceAsString("temp");
+
+      securityHandler.setHandler(new Handler.Sequence(resourceHandler, contexts));
+      innerHandler = securityHandler;
+      log.logBasic("Hop Server: Basic authentication is ENABLED");
+    } else {
+      ContextHandlerCollection contexts = createContexts();
+      ResourceHandler resourceHandler = new ResourceHandler();
+      resourceHandler.setBaseResourceAsString("temp");
+
+      innerHandler = new Handler.Sequence(resourceHandler, contexts);
+      log.logBasic("Hop Server: Basic authentication is DISABLED (enableAuth=false)");
     }
 
-    Constraint constraint = new Constraint();
-    constraint.setName(Constraint.__BASIC_AUTH);
-    constraint.setRoles(roles.toArray(new String[roles.size()]));
-    constraint.setAuthenticate(true);
+    server.setHandler(innerHandler);
 
-    ConstraintMapping constraintMapping = new ConstraintMapping();
-    constraintMapping.setConstraint(constraint);
-    constraintMapping.setPathSpec("/*");
+    // Start execution
+    createListeners();
+    server.start();
+  }
 
-    securityHandler.setConstraintMappings(new ConstraintMapping[] {constraintMapping});
-
-    // Add all the servlets defined in hop-servlets.xml ...
-    //
+  private ContextHandlerCollection createContexts() throws HopPluginException {
     ContextHandlerCollection contexts = new ContextHandlerCollection();
 
     // Root
-    //
     ServletContextHandler root =
-        new ServletContextHandler(
-            contexts, GetRootServlet.CONTEXT_PATH, ServletContextHandler.SESSIONS);
+        new ServletContextHandler(GetRootServlet.CONTEXT_PATH, ServletContextHandler.SESSIONS);
+    contexts.addHandler(root);
     GetRootServlet rootServlet = new GetRootServlet();
     rootServlet.setJettyMode(true);
-    root.addServlet(new ServletHolder(rootServlet), "/*");
 
     boolean graphicsEnvironment = supportGraphicEnvironment();
     PluginRegistry pluginRegistry = PluginRegistry.getInstance();
     List<IPlugin> plugins = pluginRegistry.getPlugins(HopServerPluginType.class);
     for (IPlugin plugin : plugins) {
-
       IHopServerPlugin servlet = pluginRegistry.loadClass(plugin, IHopServerPlugin.class);
       servlet.setup(pipelineMap, workflowMap);
       servlet.setJettyMode(true);
 
       ServletContextHandler servletContext =
-          new ServletContextHandler(
-              contexts, getContextPath(servlet), ServletContextHandler.SESSIONS);
+          new ServletContextHandler(getContextPath(servlet), ServletContextHandler.SESSIONS);
+      contexts.addHandler(servletContext);
       ServletHolder servletHolder = new ServletHolder((Servlet) servlet);
       servletContext.addServlet(servletHolder, "/*");
       servletContext.setAttribute("GraphicsEnvironment", graphicsEnvironment);
@@ -276,29 +297,17 @@ public class WebServer {
         "com.sun.jersey.config.property.packages", "org.apache.hop.www.jaxrs");
     root.addServlet(jerseyServletHolder, "/api/*");
 
-    // Allow png files to be shown for pipelines and workflows...
-    //
-    ResourceHandler resourceHandler = new ResourceHandler();
-    resourceHandler.setResourceBase("temp");
-    // add all handlers/contexts to server
-
-    // set up static servlet
+    // Static resources
     ServletHolder staticHolder = new ServletHolder("static", DefaultServlet.class);
-    // resourceBase maps to the path relative to where carte is started
-    staticHolder.setInitParameter("resourceBase", "./static/");
-    staticHolder.setInitParameter("dirAllowed", "true");
-    staticHolder.setInitParameter("pathInfoOnly", "true");
+    // baseResource maps to the path relative to where hop-server is started
+    Resource staticResource = ResourceFactory.of(server).newResource("static/");
+    root.setInitParameter(DefaultServlet.CONTEXT_INIT + "baseResource", staticResource.toString());
+    root.setInitParameter(DefaultServlet.CONTEXT_INIT + "dirAllowed", "true");
+    root.setInitParameter(DefaultServlet.CONTEXT_INIT + "pathInfoOnly", "true");
     root.addServlet(staticHolder, "/static/*");
 
-    HandlerList handlers = new HandlerList();
-    handlers.setHandlers(new Handler[] {resourceHandler, contexts});
-    securityHandler.setHandler(handlers);
-
-    server.setHandler(securityHandler);
-
-    // Start execution
-    createListeners();
-    server.start();
+    root.addServlet(new ServletHolder(rootServlet), "/*");
+    return contexts;
   }
 
   public String getContextPath(IHopServerPlugin servlet) {
@@ -365,12 +374,12 @@ public class WebServer {
           Encr.decryptPasswordOptionallyEncrypted(sslConfig.getKeyStorePassword());
       String keyPassword = Encr.decryptPasswordOptionallyEncrypted(sslConfig.getKeyPassword());
 
-      SslContextFactory.Client factory = new SslContextFactory.Client();
-      factory.setKeyStoreResource(new PathResource(new File(sslConfig.getKeyStore())));
+      SslContextFactory.Server factory = new SslContextFactory.Server();
+      factory.setKeyStorePath(sslConfig.getKeyStore());
       factory.setKeyStorePassword(keyStorePassword);
       factory.setKeyManagerPassword(keyPassword);
       factory.setKeyStoreType(sslConfig.getKeyStoreType());
-      factory.setTrustStoreResource(new PathResource(new File(sslConfig.getKeyStore())));
+      factory.setTrustStorePath(sslConfig.getKeyStore());
       factory.setTrustStorePassword(keyStorePassword);
 
       HttpConfiguration httpsConfig = new HttpConfiguration(httpConfig);
@@ -398,7 +407,7 @@ public class WebServer {
     LowResourceMonitor lowResourceMonitor = new LowResourceMonitor(server);
     if (validProperty(Const.HOP_SERVER_JETTY_ACCEPTORS)) {
       server.addBean(
-          new ConnectionLimit(
+          new NetworkConnectionLimit(
               Integer.parseInt(System.getProperty(Const.HOP_SERVER_JETTY_ACCEPTORS))));
       log.logBasic(
           BaseMessages.getString(
@@ -438,7 +447,7 @@ public class WebServer {
    */
   private boolean validProperty(String property) {
     boolean isValid = false;
-    if (System.getProperty(property) != null && System.getProperty(property).length() > 0) {
+    if (!Utils.isEmpty(System.getProperty(property))) {
       try {
         Integer.parseInt(System.getProperty(property));
         isValid = true;
@@ -451,83 +460,12 @@ public class WebServer {
     return isValid;
   }
 
-  /**
-   * @return the hostname
-   */
-  public String getHostname() {
-    return hostname;
-  }
-
-  /**
-   * @param hostname the hostname to set
-   */
-  public void setHostname(String hostname) {
-    this.hostname = hostname;
-  }
-
   public String getPasswordFile() {
     return passwordFile;
   }
 
   public void setPasswordFile(String passwordFile) {
     this.passwordFile = passwordFile;
-  }
-
-  public ILogChannel getLog() {
-    return log;
-  }
-
-  public void setLog(ILogChannel log) {
-    this.log = log;
-  }
-
-  public PipelineMap getPipelineMap() {
-    return pipelineMap;
-  }
-
-  public void setPipelineMap(PipelineMap pipelineMap) {
-    this.pipelineMap = pipelineMap;
-  }
-
-  public WorkflowMap getWorkflowMap() {
-    return workflowMap;
-  }
-
-  public void setWorkflowMap(WorkflowMap workflowMap) {
-    this.workflowMap = workflowMap;
-  }
-
-  public int getPort() {
-    return port;
-  }
-
-  public void setPort(int port) {
-    this.port = port;
-  }
-
-  /**
-   * Gets variables
-   *
-   * @return value of variables
-   */
-  public IVariables getVariables() {
-    return variables;
-  }
-
-  /**
-   * @param variables The variables to set
-   */
-  public void setVariables(IVariables variables) {
-    this.variables = variables;
-  }
-
-  /**
-   * Can be used to override the default shutdown behavior of performing a System.exit
-   *
-   * @param webServerShutdownHandler
-   */
-  public void setWebServerShutdownHandler(IWebServerShutdownHandler webServerShutdownHandler) {
-    this.webServerShutdownHandler = webServerShutdownHandler;
   }
 
   public int defaultDetectionTimer() {

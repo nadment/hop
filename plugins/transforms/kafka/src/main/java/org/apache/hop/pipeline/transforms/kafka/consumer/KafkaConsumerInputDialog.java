@@ -33,6 +33,8 @@ import org.apache.hop.core.gui.Point;
 import org.apache.hop.core.row.value.ValueMetaFactory;
 import org.apache.hop.core.util.Utils;
 import org.apache.hop.core.variables.IVariables;
+import org.apache.hop.execution.ExecutionInfoLocation;
+import org.apache.hop.execution.profiling.ExecutionDataProfile;
 import org.apache.hop.i18n.BaseMessages;
 import org.apache.hop.pipeline.PipelineMeta;
 import org.apache.hop.pipeline.TransformWithMappingMeta;
@@ -49,11 +51,11 @@ import org.apache.hop.ui.core.gui.GuiResource;
 import org.apache.hop.ui.core.gui.WindowProperty;
 import org.apache.hop.ui.core.widget.ColumnInfo;
 import org.apache.hop.ui.core.widget.ComboVar;
+import org.apache.hop.ui.core.widget.MetaSelectionLine;
 import org.apache.hop.ui.core.widget.TableView;
 import org.apache.hop.ui.core.widget.TextVar;
 import org.apache.hop.ui.hopgui.HopGui;
 import org.apache.hop.ui.hopgui.file.pipeline.HopPipelineFileType;
-import org.apache.hop.ui.hopgui.perspective.dataorch.HopDataOrchestrationPerspective;
 import org.apache.hop.ui.pipeline.transform.BaseTransformDialog;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.eclipse.swt.SWT;
@@ -92,6 +94,9 @@ public class KafkaConsumerInputDialog extends BaseTransformDialog {
   protected TextVar wFilename;
   protected Button wbFilename;
   protected Button wbCreatePipeline;
+
+  protected MetaSelectionLine<ExecutionInfoLocation> wLocation;
+  protected MetaSelectionLine<ExecutionDataProfile> wProfile;
 
   protected Label wlSubTransform;
   protected ComboVar wSubTransform;
@@ -239,6 +244,43 @@ public class KafkaConsumerInputDialog extends BaseTransformDialog {
     fdFilename.top = new FormAttachment(wlFilename, 0, SWT.CENTER);
     wFilename.setLayoutData(fdFilename);
 
+    wLocation =
+        new MetaSelectionLine<>(
+            variables,
+            metadataProvider,
+            ExecutionInfoLocation.class,
+            shell,
+            SWT.NONE,
+            BaseMessages.getString(PKG, "KafkaConsumerInputDialog.Location.Label"),
+            BaseMessages.getString(PKG, "KafkaConsumerInputDialog.Location.Tooltip"));
+    FormData fdLocation = new FormData();
+    fdLocation.left = new FormAttachment(0, 0);
+    fdLocation.top = new FormAttachment(wFilename, margin);
+    fdLocation.right = new FormAttachment(100, 0);
+    wLocation.setLayoutData(fdLocation);
+
+    wProfile =
+        new MetaSelectionLine<>(
+            variables,
+            metadataProvider,
+            ExecutionDataProfile.class,
+            shell,
+            SWT.NONE,
+            BaseMessages.getString(PKG, "KafkaConsumerInputDialog.Profile.Label"),
+            BaseMessages.getString(PKG, "KafkaConsumerInputDialog.Profile.Tooltip"));
+    FormData fdProfile = new FormData();
+    fdProfile.left = new FormAttachment(0, 0);
+    fdProfile.top = new FormAttachment(wLocation, margin);
+    fdProfile.right = new FormAttachment(100, 0);
+    wProfile.setLayoutData(fdProfile);
+
+    try {
+      wLocation.fillItems();
+      wProfile.fillItems();
+    } catch (Exception e) {
+      new ErrorDialog(shell, "Error", "Error getting lists of locations and profiles", e);
+    }
+
     // Start of tabbed display
     //
     wTabFolder = new CTabFolder(shell, SWT.BORDER);
@@ -247,7 +289,7 @@ public class KafkaConsumerInputDialog extends BaseTransformDialog {
 
     FormData fdTabFolder = new FormData();
     fdTabFolder.left = new FormAttachment(0, 0);
-    fdTabFolder.top = new FormAttachment(wlFilename, 15);
+    fdTabFolder.top = new FormAttachment(wProfile, 15);
     fdTabFolder.bottom = new FormAttachment(wOk, -15);
     fdTabFolder.right = new FormAttachment(100, 0);
     wTabFolder.setLayoutData(fdTabFolder);
@@ -298,6 +340,8 @@ public class KafkaConsumerInputDialog extends BaseTransformDialog {
 
   private void updateMeta(KafkaConsumerInputMeta m) {
     m.setFilename(wFilename.getText());
+    m.setExecutionInformationLocation(wLocation.getText());
+    m.setExecutionDataProfile(wProfile.getText());
     m.setBatchSize(wBatchSize.getText());
     m.setBatchDuration(wBatchDuration.getText());
     m.setSubTransform(wSubTransform.getText());
@@ -503,7 +547,7 @@ public class KafkaConsumerInputDialog extends BaseTransformDialog {
   private void buildOptionsTable(Composite parentWidget) {
     ColumnInfo[] columns = getOptionsColumns();
 
-    if (meta.getConfig().size() == 0) {
+    if (meta.getConfig().isEmpty()) {
       // inital call
       List<String> list = KafkaDialogHelper.getConsumerAdvancedConfigOptionNames();
       Map<String, String> advancedConfig = new LinkedHashMap<>();
@@ -814,6 +858,8 @@ public class KafkaConsumerInputDialog extends BaseTransformDialog {
 
   protected void getData() {
     wFilename.setText(Const.NVL(meta.getFilename(), ""));
+    wLocation.setText(Const.NVL(meta.getExecutionInformationLocation(), ""));
+    wProfile.setText(Const.NVL(meta.getExecutionDataProfile(), ""));
     wBootstrapServers.setText(Const.NVL(meta.getDirectBootstrapServers(), ""));
 
     populateTopicsData();
@@ -890,15 +936,11 @@ public class KafkaConsumerInputDialog extends BaseTransformDialog {
   protected void createNewKafkaPipeline() {
     PipelineMeta kafkaPipelineMeta = createSubPipelineMeta();
 
-    HopDataOrchestrationPerspective doPerspective = HopGui.getDataOrchestrationPerspective();
-    if (doPerspective == null) {
-      return;
-    }
-
     try {
       // Add a new tab with a new pipeline in the background
       //
-      doPerspective.addPipeline(hopGui, kafkaPipelineMeta, new HopPipelineFileType());
+      HopGui.getExplorerPerspective().addPipeline(kafkaPipelineMeta);
+      HopGui.getExplorerPerspective().activate();
 
       // Ask the user to save the new pipeline
       //

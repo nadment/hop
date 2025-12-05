@@ -175,6 +175,41 @@ public class TableOutputMeta extends BaseTransformMeta<TableOutput, TableOutputD
       injectionKeyDescription = "TableOutputMeta.Injection.SpecifyFields.Field")
   private boolean specifyFields;
 
+  /** Automatically update table structure based on incoming data stream */
+  @HopMetadataProperty(
+      key = "auto_update_table_structure",
+      injectionKey = "AUTO_UPDATE_TABLE_STRUCTURE",
+      injectionKeyDescription = "TableOutputMeta.Injection.AutoUpdateTableStructure.Field")
+  private boolean autoUpdateTableStructure;
+
+  /** Always drop and recreate table when auto-updating structure */
+  @HopMetadataProperty(
+      key = "always_drop_and_recreate",
+      injectionKey = "ALWAYS_DROP_AND_RECREATE",
+      injectionKeyDescription = "TableOutputMeta.Injection.AlwaysDropAndRecreate.Field")
+  private boolean alwaysDropAndRecreate;
+
+  /** Add columns from incoming stream that don't exist in target table */
+  @HopMetadataProperty(
+      key = "add_columns",
+      injectionKey = "ADD_COLUMNS",
+      injectionKeyDescription = "TableOutputMeta.Injection.AddColumns.Field")
+  private boolean addColumns;
+
+  /** Drop columns from table that don't exist in incoming stream */
+  @HopMetadataProperty(
+      key = "drop_columns",
+      injectionKey = "DROP_COLUMNS",
+      injectionKeyDescription = "TableOutputMeta.Injection.DropColumns.Field")
+  private boolean dropColumns;
+
+  /** Change column data types to match incoming stream types */
+  @HopMetadataProperty(
+      key = "change_column_types",
+      injectionKey = "CHANGE_COLUMN_TYPES",
+      injectionKeyDescription = "TableOutputMeta.Injection.ChangeColumnTypes.Field")
+  private boolean changeColumnTypes;
+
   @HopMetadataProperty(
       groupKey = "fields",
       key = "field",
@@ -232,7 +267,7 @@ public class TableOutputMeta extends BaseTransformMeta<TableOutput, TableOutputD
       IHopMetadataProvider metadataProvider)
       throws HopTransformException {
     // Just add the returning key field...
-    if (returningGeneratedKeys && generatedKeyField != null && !generatedKeyField.isEmpty()) {
+    if (returningGeneratedKeys && !Utils.isEmpty(generatedKeyField)) {
       IValueMeta key = new ValueMetaInteger(variables.resolve(generatedKeyField));
       key.setOrigin(origin);
       row.addValueMeta(key);
@@ -610,7 +645,7 @@ public class TableOutputMeta extends BaseTransformMeta<TableOutput, TableOutputD
             String crTable = db.getDDL(schemaTable, prev, tk, useAutoIncrement, pk);
 
             // Empty string means: nothing to do: set it to null...
-            if (crTable == null || crTable.isEmpty()) {
+            if (Utils.isEmpty(crTable)) {
               crTable = null;
             }
 

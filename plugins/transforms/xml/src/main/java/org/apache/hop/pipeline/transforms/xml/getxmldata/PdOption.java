@@ -17,6 +17,11 @@
 
 package org.apache.hop.pipeline.transforms.xml.getxmldata;
 
+import lombok.Getter;
+import lombok.Setter;
+
+@Getter
+@Setter
 public class PdOption {
   private boolean isValidating;
   private boolean useUrl;
@@ -26,24 +31,7 @@ public class PdOption {
   private String loopXPath;
 
   PdOption() {
-    isValidating = false;
-    useUrl = false;
-    useSnippet = false;
-    encoding = null;
-    isXmlSourceFile = false;
-    loopXPath = "";
-  }
-
-  public void setValidating(boolean validating) {
-    isValidating = validating;
-  }
-
-  public void setUseUrl(boolean useUrl) {
-    this.useUrl = useUrl;
-  }
-
-  public void setUseSnippet(boolean useSnippet) {
-    this.useSnippet = useSnippet;
+    resetOption();
   }
 
   // if the encoding is not null, the source must be a file
@@ -52,31 +40,13 @@ public class PdOption {
     this.isXmlSourceFile = true;
   }
 
-  public boolean isValidating() {
-    return isValidating;
-  }
-
-  public boolean isUseUrl() {
-    return useUrl;
-  }
-
-  public boolean isUseSnippet() {
-    return useSnippet;
-  }
-
-  public String getEncoding() {
-    return encoding;
-  }
-
-  public boolean isXmlSourceIsFile() {
-    return isXmlSourceFile;
-  }
-
-  public String getLoopXPath() {
-    return loopXPath;
-  }
-
-  public void setLoopXPath(String loopXPath) {
-    this.loopXPath = loopXPath;
+  /** Resets all configuration options to their default values. */
+  public void resetOption() {
+    this.isValidating = false;
+    this.useUrl = false;
+    this.useSnippet = false;
+    this.encoding = null;
+    this.isXmlSourceFile = false;
+    this.loopXPath = "";
   }
 }

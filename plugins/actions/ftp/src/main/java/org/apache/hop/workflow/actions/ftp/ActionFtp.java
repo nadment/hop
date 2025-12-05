@@ -336,11 +336,9 @@ public class ActionFtp extends ActionBase implements Cloneable, IAction, IFtpCon
     limitFiles = Const.toInt(resolve(getNrLimit()), 10);
 
     // Here let's put some controls before stating the workflow
-    if (moveFiles) {
-      if (Utils.isEmpty(moveToDirectory)) {
-        logError(BaseMessages.getString(PKG, "ActionFTP.MoveToFolderEmpty"));
-        return result;
-      }
+    if (moveFiles && Utils.isEmpty(moveToDirectory)) {
+      logError(BaseMessages.getString(PKG, "ActionFTP.MoveToFolderEmpty"));
+      return result;
     }
 
     if (isDetailed()) {
@@ -357,7 +355,11 @@ public class ActionFtp extends ActionBase implements Cloneable, IAction, IFtpCon
       if (!Utils.isEmpty(remoteDirectory)) {
         String realFtpDirectory = resolve(remoteDirectory);
         realFtpDirectory = normalizePath(realFtpDirectory);
-        ftpClient.changeWorkingDirectory(realFtpDirectory);
+        boolean exists = ftpClient.changeWorkingDirectory(realFtpDirectory);
+        if (!exists) {
+          logError(BaseMessages.getString(PKG, "ActionFTP.NonExistentFolder"));
+          return result;
+        }
         if (isDetailed()) {
           logDetailed(BaseMessages.getString(PKG, "ActionFTP.ChangedDir", realFtpDirectory));
         }
@@ -420,10 +422,9 @@ public class ActionFtp extends ActionBase implements Cloneable, IAction, IFtpCon
 
         if (ftpFiles.length == 1) {
           String translatedWildcard = resolve(wildcard);
-          if (!Utils.isEmpty(translatedWildcard)) {
-            if (ftpFiles[0].getName().startsWith(translatedWildcard)) {
-              throw new HopException(ftpFiles[0].getName());
-            }
+          if (!Utils.isEmpty(translatedWildcard)
+              && ftpFiles[0].getName().startsWith(translatedWildcard)) {
+            throw new HopException(ftpFiles[0].getName());
           }
         }
 
@@ -548,9 +549,7 @@ public class ActionFtp extends ActionBase implements Cloneable, IAction, IFtpCon
       if (remove) {
         ftpclient.deleteFile(filename);
         if (isDetailed()) {
-          if (isDetailed()) {
-            logDetailed(BaseMessages.getString(PKG, "ActionFTP.DeletedFile", filename));
-          }
+          logDetailed(BaseMessages.getString(PKG, "ActionFTP.DeletedFile", filename));
         }
       } else {
         if (moveFiles) {

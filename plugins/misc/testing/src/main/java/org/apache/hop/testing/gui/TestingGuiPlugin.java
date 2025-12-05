@@ -832,11 +832,6 @@ public class TestingGuiPlugin {
         return;
       }
 
-      PipelineUnitTest unitTest = getCurrentUnitTest(pipelineMeta);
-      if (unitTest != null) {
-        unitTest.setPipelineFilename("");
-      }
-
       // Remove
       //
       Map<String, Object> stateMap = getStateMap(pipelineMeta);
@@ -856,23 +851,10 @@ public class TestingGuiPlugin {
       pipelineGraph.getVariables().setVariable(DataSetConst.VAR_RUN_UNIT_TEST, "N");
       pipelineGraph.getVariables().setVariable(DataSetConst.VAR_UNIT_TEST_NAME, null);
 
-      MetadataManager<PipelineUnitTest> manager =
-          new MetadataManager<>(
-              hopGui.getVariables(),
-              hopGui.getMetadataProvider(),
-              PipelineUnitTest.class,
-              hopGui.getShell());
-      if (manager.editMetadata(unitTest.getName())) {
-        // Activate the test
-        refreshUnitTestsList();
-      }
-      testSerializer.save(unitTest);
-
       // Update the GUI
       //
       pipelineGraph.setChanged();
       pipelineGraph.updateGui();
-
     } catch (Exception e) {
       new ErrorDialog(
           hopGui.getShell(),
@@ -1107,7 +1089,7 @@ public class TestingGuiPlugin {
       return Collections.emptyList();
     }
     if (!(guiPluginObject instanceof HopGuiPipelineGraph)) {
-      return Collections.emptyList();
+      return List.of();
     }
 
     HopGuiPipelineGraph pipelineGraph = (HopGuiPipelineGraph) guiPluginObject;
@@ -1194,8 +1176,8 @@ public class TestingGuiPlugin {
     selectUnitTestInList(unitTest.getName());
   }
 
-  public static final Map<String, Object> getStateMap(PipelineMeta pipelineMeta) {
-    for (TabItemHandler item : HopGui.getDataOrchestrationPerspective().getItems()) {
+  public static Map<String, Object> getStateMap(PipelineMeta pipelineMeta) {
+    for (TabItemHandler item : HopGui.getExplorerPerspective().getItems()) {
       if (item.getTypeHandler().getSubject().equals(pipelineMeta)) {
         HopGuiPipelineGraph pipelineGraph = (HopGuiPipelineGraph) item.getTypeHandler();
         return pipelineGraph.getStateMap();
@@ -1377,11 +1359,7 @@ public class TestingGuiPlugin {
       SelectRowDialog dialog =
           new SelectRowDialog(
               hopGui.getShell(), new Variables(), SWT.DIALOG_TRIM | SWT.MAX | SWT.RESIZE, rows);
-      RowMetaAndData selection = dialog.open();
-      if (selection != null) {
-        return selection;
-      }
-      return null;
+      return dialog.open();
     } catch (Exception e) {
       new ErrorDialog(
           hopGui.getShell(),
@@ -1431,7 +1409,7 @@ public class TestingGuiPlugin {
   public void switchUnitTest(PipelineUnitTest targetTest, PipelineMeta pipelineMeta) {
     try {
       TestingGuiPlugin.getInstance().detachUnitTest();
-      TestingGuiPlugin.selectUnitTest(pipelineMeta, targetTest);
+      TestingGuiPlugin.getInstance().selectUnitTest(pipelineMeta, targetTest);
     } catch (Exception exception) {
       new ErrorDialog(
           HopGui.getInstance().getShell(),

@@ -39,7 +39,6 @@ import org.apache.hop.ui.core.widget.MetaSelectionLine;
 import org.apache.hop.ui.core.widget.TextVar;
 import org.apache.hop.ui.hopgui.HopGui;
 import org.apache.hop.ui.hopgui.file.pipeline.HopPipelineFileType;
-import org.apache.hop.ui.hopgui.perspective.dataorch.HopDataOrchestrationPerspective;
 import org.apache.hop.www.service.WebService;
 import org.apache.http.entity.ContentType;
 import org.eclipse.swt.SWT;
@@ -67,9 +66,11 @@ public class WebServiceEditor extends MetadataEditor<WebService> {
   private MetaSelectionLine<PipelineRunConfiguration> wRunConfiguration;
   private TextVar wTransform;
   private TextVar wField;
+  private TextVar wStatusCode;
   private ComboVar wContentType;
   private Button wListStatus;
   private TextVar wBodyContentVariable;
+  private TextVar wHeaderContentVariable;
 
   public WebServiceEditor(HopGui hopGui, MetadataManager<WebService> manager, WebService metadata) {
     super(hopGui, manager, metadata);
@@ -187,10 +188,8 @@ public class WebServiceEditor extends MetadataEditor<WebService> {
             PipelineRunConfiguration.class,
             parent,
             SWT.NONE,
-            "Pipeline run configuration",
-            "This is the pipeline run configuration to use on the server. "
-                + "If left blank a standard local pipeline engine is used. "
-                + "To return values please use a local pipeline engine.");
+            BaseMessages.getString(PKG, "WebServiceEditor.Runconfiguration.Label"),
+            BaseMessages.getString(PKG, "WebServiceEditor.Runconfiguration.Tooltip"));
     FormData fdRunConfiguration = new FormData();
     fdRunConfiguration.left = new FormAttachment(0, 0);
     fdRunConfiguration.top = new FormAttachment(lastControl, margin);
@@ -235,6 +234,25 @@ public class WebServiceEditor extends MetadataEditor<WebService> {
     fdField.top = new FormAttachment(wlField, 0, SWT.CENTER);
     wField.setLayoutData(fdField);
     lastControl = wlField;
+
+    // Status code field
+    //
+    Label wlStatuscode = new Label(parent, SWT.RIGHT);
+    PropsUi.setLook(wlField);
+    wlStatuscode.setText(BaseMessages.getString(PKG, "WebServiceEditor.StatusCodeField.Label"));
+    FormData fdlStatusCode = new FormData();
+    fdlStatusCode.left = new FormAttachment(0, 0);
+    fdlStatusCode.right = new FormAttachment(middle, -margin);
+    fdlStatusCode.top = new FormAttachment(lastControl, 2 * margin);
+    wlStatuscode.setLayoutData(fdlStatusCode);
+    wStatusCode = new TextVar(manager.getVariables(), parent, SWT.SINGLE | SWT.LEFT | SWT.BORDER);
+    PropsUi.setLook(wStatusCode);
+    FormData fdStatuscode = new FormData();
+    fdStatuscode.left = new FormAttachment(middle, 0);
+    fdStatuscode.right = new FormAttachment(100, 0);
+    fdStatuscode.top = new FormAttachment(wlStatuscode, 0, SWT.CENTER);
+    wStatusCode.setLayoutData(fdStatuscode);
+    lastControl = wlStatuscode;
 
     // Content type
     //
@@ -303,6 +321,31 @@ public class WebServiceEditor extends MetadataEditor<WebService> {
     wBodyContentVariable.setLayoutData(fdBodyContentVariable);
     lastControl = wlBodyContentVariable;
 
+    // HeaderContentVariable to read from
+    //
+    Label wlHeaderContentVariable = new Label(parent, SWT.RIGHT);
+    PropsUi.setLook(wlHeaderContentVariable);
+    wlHeaderContentVariable.setText(
+        BaseMessages.getString(PKG, "WebServiceEditor.HeaderContentVariable.Label"));
+    wlHeaderContentVariable.setToolTipText(
+        BaseMessages.getString(PKG, "WebServiceEditor.HeaderContentVariable.Tooltip"));
+    FormData fdlHeaderContentVariable = new FormData();
+    fdlHeaderContentVariable.left = new FormAttachment(0, 0);
+    fdlHeaderContentVariable.right = new FormAttachment(middle, -margin);
+    fdlHeaderContentVariable.top = new FormAttachment(lastControl, 2 * margin);
+    wlHeaderContentVariable.setLayoutData(fdlHeaderContentVariable);
+    wHeaderContentVariable =
+        new TextVar(manager.getVariables(), parent, SWT.SINGLE | SWT.LEFT | SWT.BORDER);
+    wHeaderContentVariable.setToolTipText(
+        BaseMessages.getString(PKG, "WebServiceEditor.HeaderContentVariable.Tooltip"));
+    PropsUi.setLook(wHeaderContentVariable);
+    FormData fdHeaderContentVariable = new FormData();
+    fdHeaderContentVariable.left = new FormAttachment(middle, 0);
+    fdHeaderContentVariable.right = new FormAttachment(100, 0);
+    fdHeaderContentVariable.top = new FormAttachment(wlHeaderContentVariable, 0, SWT.CENTER);
+    wHeaderContentVariable.setLayoutData(fdHeaderContentVariable);
+    lastControl = wlHeaderContentVariable;
+
     setWidgetsContent();
 
     // Add listener to detect change after loading data
@@ -312,9 +355,11 @@ public class WebServiceEditor extends MetadataEditor<WebService> {
     wFilename.addListener(SWT.Modify, modifyListener);
     wTransform.addListener(SWT.Modify, modifyListener);
     wField.addListener(SWT.Modify, modifyListener);
+    wStatusCode.addListener(SWT.Modify, modifyListener);
     wContentType.addListener(SWT.Modify, modifyListener);
     wListStatus.addListener(SWT.Selection, modifyListener);
     wBodyContentVariable.addListener(SWT.Modify, modifyListener);
+    wHeaderContentVariable.addListener(SWT.Modify, modifyListener);
     wRunConfiguration.addListener(SWT.Selection, modifyListener);
   }
 
@@ -362,15 +407,13 @@ public class WebServiceEditor extends MetadataEditor<WebService> {
         pipelineMeta.setFilename(realFilename);
         pipelineMeta.clearChanged();
 
-        HopDataOrchestrationPerspective perspective = HopGui.getDataOrchestrationPerspective();
+        // Open it in the Hop GUI
+        //
+        HopGui.getExplorerPerspective().addPipeline(pipelineMeta);
 
         // Switch to the perspective
         //
-        perspective.activate();
-
-        // Open it in the Hop GUI
-        //
-        HopGui.getDataOrchestrationPerspective().addPipeline(hopGui, pipelineMeta, type);
+        HopGui.getExplorerPerspective().activate();
 
         // Save the file
         hopGui.fileDelegate.fileSave();
@@ -416,9 +459,11 @@ public class WebServiceEditor extends MetadataEditor<WebService> {
     wFilename.setText(Const.NVL(ws.getFilename(), ""));
     wTransform.setText(Const.NVL(ws.getTransformName(), ""));
     wField.setText(Const.NVL(ws.getFieldName(), ""));
+    wStatusCode.setText(Const.NVL(ws.getStatusCode(), ""));
     wContentType.setText(Const.NVL(ws.getContentType(), ""));
     wListStatus.setSelection(ws.isListingStatus());
     wBodyContentVariable.setText(Const.NVL(ws.getBodyContentVariable(), ""));
+    wHeaderContentVariable.setText(Const.NVL(ws.getHeaderContentVariable(), ""));
     try {
       wRunConfiguration.fillItems();
       wRunConfiguration.setText(Const.NVL(ws.getRunConfigurationName(), ""));
@@ -434,9 +479,11 @@ public class WebServiceEditor extends MetadataEditor<WebService> {
     ws.setFilename(wFilename.getText());
     ws.setTransformName(wTransform.getText());
     ws.setFieldName(wField.getText());
+    ws.setStatusCode(wStatusCode.getText());
     ws.setContentType(wContentType.getText());
     ws.setListingStatus(wListStatus.getSelection());
     ws.setBodyContentVariable(wBodyContentVariable.getText());
+    ws.setHeaderContentVariable(wHeaderContentVariable.getText());
     ws.setRunConfigurationName(wRunConfiguration.getText());
   }
 

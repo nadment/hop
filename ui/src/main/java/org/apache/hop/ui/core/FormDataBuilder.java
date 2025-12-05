@@ -21,12 +21,38 @@ import org.eclipse.swt.layout.FormAttachment;
 import org.eclipse.swt.layout.FormData;
 import org.eclipse.swt.widgets.Control;
 
+/**
+ * Builder class for creating and configuring {@link FormData} instances using a fluent API.
+ *
+ * <p>Example usage:
+ *
+ * <pre>{@code
+ * FormData fd = FormDataBuilder.builder()
+ *     .left()
+ *     .top()
+ *     .fullWidth()
+ *     .build();
+ * }</pre>
+ */
 public class FormDataBuilder implements Cloneable {
 
-  private final FormAttachment MIN = new FormAttachment(0, 0);
-  private final FormAttachment MAX = new FormAttachment(100, 0);
+  private static final FormAttachment MIN = new FormAttachment(0, 0);
+  private static final FormAttachment MAX = new FormAttachment(100, 0);
 
   protected FormData fd = new FormData();
+
+  /**
+   * Static factory method for creating a new builder instance.
+   *
+   * @return create FormDataBuilder
+   */
+  public static FormDataBuilder builder() {
+    return new FormDataBuilder();
+  }
+
+  public FormData build() {
+    return fd;
+  }
 
   public FormDataBuilder width(int width) {
     fd.width = width;
@@ -84,6 +110,14 @@ public class FormDataBuilder implements Cloneable {
 
   public FormDataBuilder top(Control control, int margin) {
     return top(new FormAttachment(control, margin));
+  }
+
+  public FormDataBuilder left(Control control, int margin, int alignment) {
+    return left(new FormAttachment(control, margin, alignment));
+  }
+
+  public FormDataBuilder right(Control control, int margin, int alignment) {
+    return right(new FormAttachment(control, margin, alignment));
   }
 
   public FormDataBuilder top(Control control, int margin, int alignment) {

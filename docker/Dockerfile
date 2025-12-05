@@ -9,7 +9,7 @@
 #   http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing,
-# software distributed under the License is distributed on an
+# software distributed under the License is distributed on anv
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
@@ -17,6 +17,10 @@
 
 FROM alpine
 LABEL maintainer="Apache Hop Team"
+# The UID for the created user
+ARG HOP_UID=501
+# The GID for the created user
+ARG HOP_GID=501
 # path to where the artifacts should be deployed to
 ENV DEPLOYMENT_PATH=/opt/hop
 # volume mount point
@@ -47,6 +51,8 @@ ENV HOP_RUN_CONFIG=
 # parameters that should be passed on to the hop-run command
 # specify as comma separated list, e.g. PARAM_1=aaa,PARAM_2=bbb
 ENV HOP_RUN_PARAMETERS=
+# An optional startaction parameter
+ENV HOP_START_ACTION=
 # An optional export of metadata in JSON format
 ENV HOP_RUN_METADATA_EXPORT=
 # System properties that should be set
@@ -59,6 +65,8 @@ ENV HOP_OPTIONS=-XX:+AggressiveHeap
 # Path to custom entrypoint extension script file - optional
 # e.g. to fetch Hop project files from S3 or gitlab
 ENV HOP_CUSTOM_ENTRYPOINT_EXTENSION_SHELL_FILE_PATH=
+# Enable or disable the auth
+ENV HOP_SERVER_AUTH=true
 # The server user
 ENV HOP_SERVER_USER=cluster
 # The server password
@@ -77,37 +85,25 @@ ENV HOP_SERVER_KEY_PASSWORD=
 ENV HOP_SERVER_MAX_LOG_LINES=
 ENV HOP_SERVER_MAX_LOG_TIMEOUT=
 ENV HOP_SERVER_MAX_OBJECT_TIMEOUT=
-
-# Define en_US.
-# ENV LANGUAGE en_US.UTF-8
-# ENV LANG en_US.UTF-8
-# ENV LC_ALL en_US.UTF-8
-# ENV LC_CTYPE en_US.UTF-8
-# ENV LC_MESSAGES en_US.UTF-8
-
-# Give the /tmp folder some breathing room
-#
-RUN chmod 777 -R /tmp && chmod o+t -R /tmp
-
-# Install some fonts
-RUN apk --no-cache add openjdk17-jre \
-        msttcorefonts-installer \
-        fontconfig && \
-        update-ms-fonts && \
-        fc-cache -f
+# We want to run hop-config with these options:
+ENV HOP_CONFIG_OPTIONS=
 
 # INSTALL REQUIRED PACKAGES AND ADJUST LOCALE
 # procps: The package includes the programs ps, top, vmstat, w, kill, free, slabtop, and skill
+RUN addgroup -g ${HOP_GID} -S hop \
+    && adduser -u ${HOP_UID} -S -D -G hop hop \
+    && chmod 777 -R /tmp && chmod o+t -R /tmp \
+    && apk update \
+    && apk --no-cache add bash curl fontconfig msttcorefonts-installer openjdk17-jre procps \
+    && update-ms-fonts \
+    && fc-cache -f \
+    && rm -rf /var/cache/apk/* \
+    && mkdir ${DEPLOYMENT_PATH} \
+    && mkdir ${VOLUME_MOUNT_POINT} \
+    && chown hop:hop ${DEPLOYMENT_PATH} \
+    && chown hop:hop ${VOLUME_MOUNT_POINT}
 
 
-RUN apk update \
-  && apk add --no-cache bash curl procps \
-  && rm -rf /var/cache/apk/* \
-  && mkdir ${DEPLOYMENT_PATH} \
-  && mkdir ${VOLUME_MOUNT_POINT} \
-  && adduser -D -s /bin/bash -h /home/hop hop \
-  && chown hop:hop ${DEPLOYMENT_PATH} \
-  && chown hop:hop ${VOLUME_MOUNT_POINT}
 
 
 # copy the hop package from the local resources folder to the container image directory
@@ -123,5 +119,5 @@ VOLUME ["/files"]
 USER hop
 ENV PATH=$PATH:${DEPLOYMENT_PATH}/hop
 WORKDIR /home/hop
-# CMD ["/bin/bash"]
+
 ENTRYPOINT ["/bin/bash", "/opt/hop/run.sh"]

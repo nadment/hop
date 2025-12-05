@@ -108,6 +108,7 @@ import org.apache.hop.ui.core.gui.HopNamespace;
 import org.apache.hop.ui.hopgui.CanvasFacade;
 import org.apache.hop.ui.hopgui.CanvasListener;
 import org.apache.hop.ui.hopgui.HopGui;
+import org.apache.hop.ui.hopgui.HopGuiExtensionPoint;
 import org.apache.hop.ui.hopgui.ServerPushSessionFacade;
 import org.apache.hop.ui.hopgui.context.GuiContextUtil;
 import org.apache.hop.ui.hopgui.context.IGuiContextHandler;
@@ -115,6 +116,7 @@ import org.apache.hop.ui.hopgui.dialog.NotePadDialog;
 import org.apache.hop.ui.hopgui.file.IHopFileType;
 import org.apache.hop.ui.hopgui.file.IHopFileTypeHandler;
 import org.apache.hop.ui.hopgui.file.delegates.HopGuiNotePadDelegate;
+import org.apache.hop.ui.hopgui.file.shared.HopGuiAbstractGraph;
 import org.apache.hop.ui.hopgui.file.shared.HopGuiTooltipExtension;
 import org.apache.hop.ui.hopgui.file.workflow.context.HopGuiWorkflowActionContext;
 import org.apache.hop.ui.hopgui.file.workflow.context.HopGuiWorkflowContext;
@@ -129,10 +131,9 @@ import org.apache.hop.ui.hopgui.file.workflow.delegates.HopGuiWorkflowLogDelegat
 import org.apache.hop.ui.hopgui.file.workflow.delegates.HopGuiWorkflowRunDelegate;
 import org.apache.hop.ui.hopgui.file.workflow.delegates.HopGuiWorkflowUndoDelegate;
 import org.apache.hop.ui.hopgui.file.workflow.extension.HopGuiWorkflowGraphExtension;
-import org.apache.hop.ui.hopgui.perspective.dataorch.HopDataOrchestrationPerspective;
-import org.apache.hop.ui.hopgui.perspective.dataorch.HopGuiAbstractGraph;
 import org.apache.hop.ui.hopgui.perspective.execution.ExecutionPerspective;
 import org.apache.hop.ui.hopgui.perspective.execution.IExecutionViewer;
+import org.apache.hop.ui.hopgui.perspective.explorer.ExplorerPerspective;
 import org.apache.hop.ui.hopgui.shared.SwtGc;
 import org.apache.hop.ui.util.EnvironmentUtils;
 import org.apache.hop.ui.util.HelpUtils;
@@ -150,7 +151,6 @@ import org.apache.hop.workflow.engine.IWorkflowEngine;
 import org.apache.hop.workflow.engine.WorkflowEngineFactory;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.CTabFolder;
-import org.eclipse.swt.custom.CTabItem;
 import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.events.MouseAdapter;
 import org.eclipse.swt.events.MouseEvent;
@@ -257,7 +257,7 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
   public static final String CONST_WORKFLOW_GRAPH_DIALOG_LOOP_AFTER_HOP_ENABLED_TITLE =
       "WorkflowGraph.Dialog.LoopAfterHopEnabled.Title";
 
-  @Getter private final HopDataOrchestrationPerspective perspective;
+  @Getter private final ExplorerPerspective perspective;
 
   @Setter @Getter protected ILogChannel log;
 
@@ -314,7 +314,7 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
   public CTabFolder extraViewTabFolder;
 
   private ToolBar toolBar;
-  private GuiToolbarWidgets toolBarWidgets;
+  @Getter private GuiToolbarWidgets toolBarWidgets;
 
   private boolean halting;
 
@@ -354,18 +354,15 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
   public HopGuiWorkflowGraph(
       Composite parent,
       final HopGui hopGui,
-      final CTabItem parentTabItem,
-      final HopDataOrchestrationPerspective perspective,
+      final ExplorerPerspective perspective,
       final WorkflowMeta workflowMeta,
       final HopWorkflowFileType<WorkflowMeta> fileType) {
-    super(hopGui, parent, SWT.NONE, parentTabItem);
+    super(hopGui, parent, SWT.NO_BACKGROUND);
     this.perspective = perspective;
     this.workflowMeta = workflowMeta;
     this.fileType = fileType;
-
     this.log = hopGui.getLog();
     this.hopGui = hopGui;
-    this.workflowMeta = workflowMeta;
 
     this.props = PropsUi.getInstance();
     this.areaOwners = new ArrayList<>();
@@ -640,6 +637,7 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
             //
           case WORKFLOW_HOP_ICON:
             WorkflowHopMeta hop = (WorkflowHopMeta) areaOwner.getOwner();
+            WorkflowHopMeta originalHop = hop.clone();
             if (hop.getFromAction().isEvaluation()) {
               if (hop.isUnconditional()) {
                 hop.setUnconditional(false);
@@ -651,6 +649,11 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
                   hop.setUnconditional(true);
                 }
               }
+              hopGui.undoDelegate.addUndoChange(
+                  workflowMeta,
+                  new WorkflowHopMeta[] {originalHop},
+                  new WorkflowHopMeta[] {hop},
+                  new int[] {workflowMeta.indexOfWorkflowHop(hop)});
               updateGui();
             }
             break;
@@ -815,6 +818,7 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
             editAction(actionMeta);
             return;
           }
+          break;
         default:
           break;
       }
@@ -849,7 +853,7 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
           // We moved around some items: store undo info...
           //
           boolean also = false;
-          if (selectedNotes != null && !selectedNotes.isEmpty() && previousNoteLocations != null) {
+          if (!Utils.isEmpty(selectedNotes) && previousNoteLocations != null) {
             int[] indexes = workflowMeta.getNoteIndexes(selectedNotes);
 
             addUndoPosition(
@@ -858,7 +862,7 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
                 previousNoteLocations,
                 workflowMeta.getSelectedNoteLocations(),
                 also);
-            also = selectedActions != null && !selectedActions.isEmpty();
+            also = !Utils.isEmpty(selectedActions);
           }
           if (selectedActions != null
               && !selectedActions.isEmpty()
@@ -948,7 +952,7 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
                   previousNoteLocations,
                   workflowMeta.getSelectedNoteLocations(),
                   also);
-              also = selectedActions != null && !selectedActions.isEmpty();
+              also = !Utils.isEmpty(selectedActions);
             }
             if (selectedActions != null
                 && !selectedActions.isEmpty()
@@ -1569,7 +1573,6 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
     if ((isRunning() && !halting)) {
       halting = true;
       workflow.stopExecution();
-      log.logBasic(BaseMessages.getString(PKG, "WorkflowLog.Log.ProcessingOfWorkflowStopped"));
 
       halting = false;
 
@@ -1846,7 +1849,7 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
       type = GuiActionType.Modify,
       name = "i18n::HopGuiWorkflowGraph.ContextualAction.EditActionDescription.Text",
       tooltip = "i18n::HopGuiWorkflowGraph.ContextualAction.EditActionDescription.Tooltip",
-      image = "ui/images/edit_description.svg",
+      image = "ui/images/edit-description.svg",
       category = "i18n::HopGuiWorkflowGraph.ContextualAction.Category.Basic.Text",
       categoryOrder = "1")
   public void editActionDescription(HopGuiWorkflowActionContext context) {
@@ -2654,7 +2657,7 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
           actionCopy = (ActionMeta) areaOwner.getParent();
           Result result = actionResult.getResult();
           tip.append("'").append(actionCopy.getName()).append("' ");
-          if (result.getResult()) {
+          if (result.isResult()) {
             tipImage = GuiResource.getInstance().getImageSuccess();
             tip.append("finished successfully.");
           } else {
@@ -2662,7 +2665,7 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
             tip.append("failed.");
           }
           tip.append(Const.CR).append("------------------------").append(Const.CR).append(Const.CR);
-          tip.append("Result         : ").append(result.getResult()).append(Const.CR);
+          tip.append("Result         : ").append(result.isResult()).append(Const.CR);
           tip.append("Errors         : ").append(result.getNrErrors()).append(Const.CR);
 
           if (result.getNrLinesRead() > 0) {
@@ -2686,7 +2689,7 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
           if (result.getNrLinesRejected() > 0) {
             tip.append("Lines rejected : ").append(result.getNrLinesRejected()).append(Const.CR);
           }
-          if (result.getResultFiles() != null && !result.getResultFiles().isEmpty()) {
+          if (!Utils.isEmpty(result.getResultFiles())) {
             tip.append(Const.CR).append("Result files:").append(Const.CR);
             if (result.getResultFiles().size() > 10) {
               tip.append(" (10 files of ").append(result.getResultFiles().size()).append(" shown");
@@ -2697,7 +2700,7 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
               tip.append("  - ").append(file.toString()).append(Const.CR);
             }
           }
-          if (result.getRows() != null && !result.getRows().isEmpty()) {
+          if (!Utils.isEmpty(result.getRows())) {
             tip.append(Const.CR).append("Result rows: ");
             if (result.getRows().size() > 10) {
               tip.append(" (10 rows of ").append(result.getRows().size()).append(" shown");
@@ -2774,7 +2777,7 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
       }
     }
 
-    if (hi != null && tip.length() == 0) {
+    if (hi != null && tip.isEmpty()) {
       // Set the tooltip for the hop:
       tip.append(BaseMessages.getString(PKG, "WorkflowGraph.Dialog.HopInfo")).append(Const.CR);
       tip.append(BaseMessages.getString(PKG, "WorkflowGraph.Dialog.HopInfo.SourceEntry"))
@@ -2801,7 +2804,7 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
       }
     }
 
-    if (tip == null || tip.length() == 0) {
+    if (Utils.isEmpty(tip)) {
       toolTip.setVisible(false);
     } else {
       if (!tip.toString().equalsIgnoreCase(getToolTipText())) {
@@ -2828,9 +2831,8 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
       if (referencedMeta == null) {
         return; // Sorry, nothing loaded
       }
-      IHopFileType fileTypeHandler =
-          hopGui.getPerspectiveManager().findFileTypeHandler(referencedMeta);
-      fileTypeHandler.openFile(hopGui, referencedMeta.getFilename(), hopGui.getVariables());
+      IHopFileType fileType = hopGui.getPerspectiveManager().findFileTypeHandler(referencedMeta);
+      fileType.openFile(hopGui, referencedMeta.getFilename(), hopGui.getVariables());
     } catch (Exception e) {
       new ErrorDialog(
           hopShell(),
@@ -3266,6 +3268,20 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
               super.enableSnapAlignDistributeMenuItems(
                   fileType, !workflowMeta.getSelectedActions().isEmpty());
 
+              try {
+                ExtensionPointHandler.callExtensionPoint(
+                    LogChannel.UI,
+                    variables,
+                    HopGuiExtensionPoint.HopGuiWorkflowGraphUpdateGui.id,
+                    this);
+              } catch (Exception xe) {
+                LogChannel.UI.logError(
+                    "Error handling extension point 'HopGuiWorkflowGraphUpdateGui'", xe);
+              }
+
+              perspective.updateTabItem(this);
+              perspective.updateTreeItem(this);
+
               HopGuiWorkflowGraph.super.redraw();
             });
   }
@@ -3311,7 +3327,6 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
       hopGui.setParametersAsVariablesInUI(workflowMeta, variables);
 
       updateGui();
-      perspective.updateTabs();
       return true;
     }
     return false;
@@ -3332,6 +3347,8 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
       AuditManager.registerEvent(
           HopNamespace.getNamespace(), "file", workflowMeta.getFilename(), "save");
 
+      boolean fileExist = HopVfs.fileExists(workflowMeta.getFilename());
+
       String xml = workflowMeta.getXml(variables);
       OutputStream out = HopVfs.getOutputStream(workflowMeta.getFilename(), false);
       try {
@@ -3339,13 +3356,18 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
         out.write(xml.getBytes(StandardCharsets.UTF_8));
         workflowMeta.clearChanged();
         updateGui();
-        HopGui.getDataOrchestrationPerspective().updateTabs();
       } finally {
         out.flush();
         out.close();
 
         ExtensionPointHandler.callExtensionPoint(
             log, variables, HopExtensionPoint.WorkflowAfterSave.id, workflowMeta);
+
+        // If we create a new file, refresh the explorer perspective tree
+        // TODO: find a better way to refresh only a partial tree item
+        if (!fileExist) {
+          perspective.refresh();
+        }
       }
     } catch (Exception e) {
       throw new HopException(
@@ -3362,6 +3384,9 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
         filename = filename + this.getFileType().getDefaultFileExtension();
       }
 
+      // Normalize file name
+      filename = HopVfs.normalize(filename);
+
       FileObject fileObject = HopVfs.getFileObject(filename);
       if (fileObject.exists()) {
         MessageBox box =
@@ -3376,7 +3401,7 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
 
       workflowMeta.setFilename(filename);
       save();
-      hopGui.fileRefreshDelegate.register(fileObject.getPublicURIString(), this);
+      hopGui.fileRefreshDelegate.register(filename, this);
     } catch (Exception e) {
       throw new HopException("Error validating file existence for '" + filename + "'", e);
     }
@@ -3432,7 +3457,7 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
     rotateItem.addListener(SWT.Selection, e -> rotateExtraView());
 
     ToolItem closeItem = new ToolItem(extraViewToolBar, SWT.PUSH);
-    closeItem.setImage(GuiResource.getInstance().getImageClosePanel());
+    closeItem.setImage(GuiResource.getInstance().getImageClose());
     closeItem.setToolTipText(
         BaseMessages.getString(PKG, "WorkflowGraph.ExecutionResultsPanel.CloseButton.Tooltip"));
     closeItem.addListener(SWT.Selection, e -> disposeExtraView());
@@ -3708,7 +3733,6 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
                   hopGuiLoggingObject);
 
           workflow.setLogLevel(executionConfiguration.getLogLevel());
-          workflow.setInteractive(true);
           workflow.setGatheringMetrics(executionConfiguration.isGatheringMetrics());
 
           // Set the variables that where specified...
@@ -3773,9 +3797,8 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
 
           // Attach a listener to notify us that the workflow has finished.
           //
-          workflow.addExecutionFinishedListener(
-              workflow -> HopGuiWorkflowGraph.this.workflowFinished());
-
+          workflow.addExecutionFinishedListener(e -> HopGuiWorkflowGraph.this.workflowFinished());
+          workflow.addExecutionStoppedListener(e -> HopGuiWorkflowGraph.this.workflowStopped());
           // Show the execution results views
           //
           addAllTabs();
@@ -3831,11 +3854,23 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
     // Do a final check to see if it all ended...
     //
     if (workflow != null && workflow.isInitialized() && workflow.isFinished()) {
-      log.logBasic(BaseMessages.getString(PKG, "WorkflowLog.Log.WorkflowHasEnded"));
+      log.logBasic(
+          BaseMessages.getString(PKG, "WorkflowLog.Log.WorkflowHasEnded", workflowMeta.getName()));
     }
 
     stopRedrawTimer();
 
+    updateGui();
+  }
+
+  protected void workflowStopped() {
+    if (workflow != null && workflow.isInitialized() && workflow.isStopped()) {
+      log.logBasic(
+          BaseMessages.getString(
+              PKG, "WorkflowLog.Log.ProcessingOfWorkflowStopped", workflowMeta.getName()));
+    }
+
+    stopRedrawTimer();
     updateGui();
   }
 
@@ -4099,31 +4134,33 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
     try {
       // Is there an active IWorkflow?
       //
-      ExecutionPerspective ep = HopGui.getExecutionPerspective();
+      ExecutionPerspective executionPerspective = HopGui.getExecutionPerspective();
 
       if (workflow != null) {
-        IExecutionViewer viewer = ep.findViewer(workflow.getLogChannelId(), workflowMeta.getName());
+        IExecutionViewer viewer =
+            executionPerspective.findViewer(workflow.getLogChannelId(), workflowMeta.getName());
         if (viewer != null) {
-          ep.setActiveViewer(viewer);
-          ep.activate();
+          executionPerspective.setActiveViewer(viewer);
+          executionPerspective.activate();
           return;
         } else {
           // We know the location, look it up
           //
-          ep.refresh();
+          executionPerspective.refresh();
 
           // Get the location
           String locationName =
               variables.resolve(
                   workflow.getWorkflowRunConfiguration().getExecutionInfoLocationName());
           if (StringUtils.isNotEmpty(locationName)) {
-            ExecutionInfoLocation location = ep.getLocationMap().get(locationName);
+            ExecutionInfoLocation location =
+                executionPerspective.getLocationMap().get(locationName);
             IExecutionInfoLocation iLocation = location.getExecutionInfoLocation();
             Execution execution = iLocation.getExecution(workflow.getLogChannelId());
             if (execution != null) {
               ExecutionState executionState = iLocation.getExecutionState(execution.getId());
-              ep.createExecutionViewer(locationName, execution, executionState);
-              ep.activate();
+              executionPerspective.createExecutionViewer(locationName, execution, executionState);
+              executionPerspective.activate();
               return;
             }
           }
@@ -4159,11 +4196,12 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
 
       // This activates the perspective, refreshes elements.
       //
-      ep.activate();
+      executionPerspective.activate();
 
       // The refresh means the location is available over there now.
       //
-      ep.createLastExecutionView(locationName, ExecutionType.Workflow, workflowMeta.getName());
+      executionPerspective.createLastExecutionView(
+          locationName, ExecutionType.Workflow, workflowMeta.getName());
 
     } catch (Exception e) {
       new ErrorDialog(
@@ -4284,10 +4322,10 @@ public class HopGuiWorkflowGraph extends HopGuiAbstractGraph
               hopDisplay()
                   .asyncExec(
                       () -> {
-                        if (!HopGuiWorkflowGraph.this.canvas.isDisposed()) {
-                          if (perspective.isActive() && HopGuiWorkflowGraph.this.isVisible()) {
-                            updateGui();
-                          }
+                        if (!HopGuiWorkflowGraph.this.canvas.isDisposed()
+                            && perspective.isActive()
+                            && HopGuiWorkflowGraph.this.isVisible()) {
+                          updateGui();
                         }
                       });
             }

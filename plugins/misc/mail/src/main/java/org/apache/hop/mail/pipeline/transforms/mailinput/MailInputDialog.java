@@ -724,7 +724,7 @@ public class MailInputDialog extends BaseTransformDialog {
 
     // SelectFolder button
     wSelectFolder = new Button(wIMAPSettings, SWT.PUSH);
-    wSelectFolder.setImage(GuiResource.getInstance().getImageBol());
+    wSelectFolder.setImage(GuiResource.getInstance().getImageFolder());
     wSelectFolder.setToolTipText(
         BaseMessages.getString(PKG, "MailInput.SelectFolderConnection.Label"));
     PropsUi.setLook(wSelectFolder);
@@ -1814,10 +1814,6 @@ public class MailInputDialog extends BaseTransformDialog {
       MailInputMeta oneMeta = new MailInputMeta();
       getInfo(oneMeta);
 
-      PipelineMeta previewMeta =
-          PipelinePreviewFactory.generatePreviewPipeline(
-              metadataProvider, oneMeta, wTransformName.getText());
-
       EnterNumberDialog numberDialog =
           new EnterNumberDialog(
               shell,
@@ -1827,6 +1823,11 @@ public class MailInputDialog extends BaseTransformDialog {
 
       int previewSize = numberDialog.open();
       if (previewSize > 0) {
+        oneMeta.setRowLimit(Integer.toString(previewSize));
+        PipelineMeta previewMeta =
+            PipelinePreviewFactory.generatePreviewPipeline(
+                metadataProvider, oneMeta, wTransformName.getText());
+
         PipelinePreviewProgressDialog progressDialog =
             new PipelinePreviewProgressDialog(
                 shell,

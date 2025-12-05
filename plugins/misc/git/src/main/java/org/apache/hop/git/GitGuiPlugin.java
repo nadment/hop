@@ -18,23 +18,26 @@
 
 package org.apache.hop.git;
 
-import static org.apache.hop.core.Const.NVL;
-
 import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import lombok.Getter;
 import org.apache.commons.vfs2.FileObject;
 import org.apache.commons.vfs2.FileSystemException;
+import org.apache.hop.core.Const;
 import org.apache.hop.core.exception.HopFileException;
 import org.apache.hop.core.gui.plugin.GuiPlugin;
 import org.apache.hop.core.gui.plugin.callback.GuiCallback;
+import org.apache.hop.core.gui.plugin.key.GuiKeyboardShortcut;
+import org.apache.hop.core.gui.plugin.key.GuiOsxKeyboardShortcut;
 import org.apache.hop.core.gui.plugin.menu.GuiMenuElement;
 import org.apache.hop.core.gui.plugin.toolbar.GuiToolbarElement;
 import org.apache.hop.core.gui.plugin.toolbar.GuiToolbarElementType;
 import org.apache.hop.core.logging.LogChannel;
+import org.apache.hop.core.util.Utils;
 import org.apache.hop.core.vfs.HopVfs;
 import org.apache.hop.git.info.GitInfoExplorerFileType;
 import org.apache.hop.git.info.GitInfoExplorerFileTypeHandler;
@@ -59,13 +62,13 @@ import org.apache.hop.ui.hopgui.perspective.explorer.IExplorerRootChangedListene
 import org.apache.hop.ui.hopgui.perspective.explorer.IExplorerSelectionListener;
 import org.eclipse.jgit.merge.MergeStrategy;
 import org.eclipse.swt.SWT;
-import org.eclipse.swt.custom.CLabel;
-import org.eclipse.swt.events.SelectionAdapter;
-import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.graphics.Color;
-import org.eclipse.swt.widgets.Control;
+import org.eclipse.swt.graphics.Point;
+import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.widgets.Menu;
 import org.eclipse.swt.widgets.MenuItem;
+import org.eclipse.swt.widgets.Shell;
+import org.eclipse.swt.widgets.ToolItem;
 import org.eclipse.swt.widgets.Tree;
 import org.eclipse.swt.widgets.TreeItem;
 
@@ -77,6 +80,16 @@ public class GitGuiPlugin
         IExplorerSelectionListener {
 
   public static final Class<?> PKG = GitGuiPlugin.class;
+
+  public static final String ID_TOOLBAR_ITEM_GIT = "toolbar-item-30000-git";
+  public static final String ID_CONTEXT_MENU_GIT = "context-menu-git";
+
+  public static final String CONTEXT_MENU_GIT_CREATE_BRANCH = "context-menu-git-20010-CreateBranch";
+  public static final String CONTEXT_MENU_GIT_MERGE_BRANCH = "context-menu-git-20020-MergeBranch";
+  public static final String CONTEXT_MENU_GIT_RENAME_BRANCH = "context-menu-git-20020-RenameBranch";
+  public static final String CONTEXT_MENU_GIT_DELETE_BRANCH = "context-menu-git-20030-DeleteBranch";
+  public static final String CONTEXT_MENU_GIT_PUSH = "context-menu-git-30000-Push";
+  public static final String CONTEXT_MENU_GIT_PULL = "context-menu-git-30010-Pull";
 
   public static final String TOOLBAR_ITEM_GIT_INFO = "ExplorerPerspective-Toolbar-20100-GitInfo";
   public static final String TOOLBAR_ITEM_ADD = "ExplorerPerspective-Toolbar-20200-Add";
@@ -97,8 +110,10 @@ public class GitGuiPlugin
   private static GitGuiPlugin instance;
 
   private static UIGit git;
-  private Map<String, UIFile> changedFiles;
-  private Map<String, String> ignoredFiles;
+
+  @Getter private Map<String, UIFile> changedFiles;
+
+  @Getter private Map<String, String> ignoredFiles;
 
   private final Color colorIgnored;
   private final Color colorStagedUnchanged;
@@ -251,6 +266,13 @@ public class GitGuiPlugin
     return HopVfs.getFileObject(filename).exists();
   }
 
+  @GuiMenuElement(
+      root = ID_CONTEXT_MENU_GIT,
+      parentId = ID_CONTEXT_MENU_GIT,
+      id = CONTEXT_MENU_GIT_PUSH,
+      label = "i18n::GitGuiPlugin.Menu.Branch.Push.Text",
+      image = "push.svg",
+      separator = true)
   @GuiToolbarElement(
       root = ExplorerPerspective.GUI_PLUGIN_TOOLBAR_PARENT_ID,
       id = TOOLBAR_ITEM_PUSH,
@@ -268,11 +290,19 @@ public class GitGuiPlugin
     }
   }
 
+  @GuiMenuElement(
+      root = ID_CONTEXT_MENU_GIT,
+      parentId = ID_CONTEXT_MENU_GIT,
+      id = CONTEXT_MENU_GIT_PULL,
+      label = "i18n::GitGuiPlugin.Menu.Branch.Pull.Text",
+      image = "pull.svg")
   @GuiToolbarElement(
       root = ExplorerPerspective.GUI_PLUGIN_TOOLBAR_PARENT_ID,
       id = TOOLBAR_ITEM_PULL,
       toolTip = "i18n::GitGuiPlugin.Toolbar.Pull.Tooltip",
       image = "pull.svg")
+  @GuiKeyboardShortcut(control = true, key = 'T')
+  @GuiOsxKeyboardShortcut(control = true, key = 'T')
   public void gitPull() {
     try {
       if (git.pull()) {
@@ -295,151 +325,69 @@ public class GitGuiPlugin
   }
 
   @GuiToolbarElement(
-      root = ExplorerPerspective.GUI_PLUGIN_TOOLBAR_PARENT_ID,
-      id = TOOLBAR_ITEM_BRANCH,
-      type = GuiToolbarElementType.LABEL,
-      label = "xxxxxxxxxxxxxxxxxxxxx",
-      toolTip = "i18n::GitGuiPlugin.Toolbar.Branch.Tooltip")
-  public void gitBranches() {
-    List<String> branches = git.getBranches();
-    Menu menu = new Menu(HopGui.getInstance().getShell());
-    String currentBranch = git.getBranch();
+      root = HopGui.ID_STATUS_TOOLBAR,
+      id = ID_TOOLBAR_ITEM_GIT,
+      type = GuiToolbarElementType.BUTTON,
+      image = "branch.svg",
+      toolTip = "i18n::GitGuiPlugin.Toolbar.Branch.Tooltip",
+      separator = true)
+  public void showGitContextMenu() {
+    ToolItem item = getGitToolItem();
+    if (item != null) {
+      Rectangle rect = item.getBounds();
+      Point pt = item.getParent().toDisplay(new Point(rect.x, rect.y + rect.height));
+      Menu menu = createGitContextMenu();
+      menu.setLocation(pt);
+      menu.setVisible(true);
+    }
+  }
 
-    MenuItem createBranch = new MenuItem(menu, SWT.PUSH);
-    createBranch.setText(BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.Branch.CreateBranch"));
-    MenuItem deleteBranch = new MenuItem(menu, SWT.PUSH);
-    deleteBranch.setText(BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.Branch.DeleteBranch"));
-    MenuItem mergeBranch = new MenuItem(menu, SWT.PUSH);
-    mergeBranch.setText(BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.Branch.MergeBranch"));
-    new MenuItem(menu, SWT.SEPARATOR);
+  private Menu createGitContextMenu() {
+    Shell shell = HopGui.getInstance().getActiveShell();
+    Menu menu = new Menu(shell, SWT.POP_UP);
 
-    // Create Branch listener
-    createBranch.addSelectionListener(
-        new SelectionAdapter() {
-          @Override
-          public void widgetSelected(SelectionEvent e) {
-            EnterStringDialog enterStringDialog =
-                new EnterStringDialog(
-                    HopGui.getInstance().getShell(),
-                    "",
-                    BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.Branch.CreateBranch.Header"),
-                    BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.Branch.CreateBranch.Message"));
-            String message = enterStringDialog.open();
-            if (message != null) {
-              boolean branchCreated = git.createBranch(message);
-              if (branchCreated) {
-                MessageBox pullSuccessful =
-                    new MessageBox(HopGui.getInstance().getShell(), SWT.ICON_INFORMATION);
-                pullSuccessful.setText(
-                    BaseMessages.getString(
-                        PKG, "GitGuiPlugin.Dialog.Branch.CreateBranchSuccessFul.Header"));
-                pullSuccessful.setMessage(
-                    BaseMessages.getString(
-                        PKG, "GitGuiPlugin.Dialog.Branch.CreateBranchSuccessFul.Message"));
-                pullSuccessful.open();
-              }
-              // Refresh the tree, change colors...
-              //
-              ExplorerPerspective.getInstance().refresh();
-            }
-          }
-        });
-
-    // Delete Branch listener
-    deleteBranch.addSelectionListener(
-        new SelectionAdapter() {
-          @Override
-          public void widgetSelected(SelectionEvent e) {
-            EnterSelectionDialog selectionDialog =
-                new EnterSelectionDialog(
-                    HopGui.getInstance().getShell(),
-                    branches.toArray(new String[0]),
-                    BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.Branch.DeleteBranch.Header"),
-                    BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.Branch.DeleteBranch.Message"));
-            String branchToDelete = selectionDialog.open();
-            if (branchToDelete != null) {
-              boolean branchDeleted = git.deleteBranch(branchToDelete, true);
-              if (branchDeleted) {
-                MessageBox pullSuccessful =
-                    new MessageBox(HopGui.getInstance().getShell(), SWT.ICON_INFORMATION);
-                pullSuccessful.setText(
-                    BaseMessages.getString(
-                        PKG, "GitGuiPlugin.Dialog.Branch.DeleteBranchSuccessFul.Header"));
-                pullSuccessful.setMessage(
-                    BaseMessages.getString(
-                        PKG, "GitGuiPlugin.Dialog.Branch.DeleteBranchSuccessFul.Message"));
-                pullSuccessful.open();
-              }
-              // Refresh the tree, change colors...
-              //
-              ExplorerPerspective.getInstance().refresh();
-            }
-          }
-        });
-
-    // Merge Branch listener
-    mergeBranch.addSelectionListener(
-        new SelectionAdapter() {
-          @Override
-          public void widgetSelected(SelectionEvent e) {
-            EnterSelectionDialog selectionDialog =
-                new EnterSelectionDialog(
-                    HopGui.getInstance().getShell(),
-                    branches.toArray(new String[0]),
-                    BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.Branch.MergeBranch.Header"),
-                    BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.Branch.MergeBranch.Message"));
-            String branchToMerge = selectionDialog.open();
-            if (branchToMerge != null) {
-              try {
-                boolean branchMerged = git.mergeBranch(branchToMerge, MergeStrategy.RECURSIVE);
-                if (branchMerged) {
-                  MessageBox mergeSuccessful =
-                      new MessageBox(HopGui.getInstance().getShell(), SWT.ICON_INFORMATION);
-                  mergeSuccessful.setText(
-                      BaseMessages.getString(
-                          PKG, "GitGuiPlugin.Dialog.Branch.MergeBranchSuccessFul.Header"));
-                  mergeSuccessful.setMessage(
-                      BaseMessages.getString(
-                          PKG, "GitGuiPlugin.Dialog.Branch.MergeBranchSuccessFul.Message"));
-                  mergeSuccessful.open();
-                }
-              } catch (Exception ex) {
-                new ErrorDialog(
-                    HopGui.getInstance().getShell(),
-                    BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.MergeBranchError.Header"),
-                    BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.MergeBranchError.Message"),
-                    ex);
-              }
-              // Refresh the tree, change colors...
-              //
-              ExplorerPerspective.getInstance().refresh();
-            }
-          }
-        });
-
-    // Add all known branches to the list
-    for (String branch : branches) {
-      MenuItem item = new MenuItem(menu, SWT.CHECK);
-      item.setText(branch);
-      // If the item is the active branch mark it as checked
-      if (branch.equals(currentBranch)) {
-        item.setSelection(true);
-      }
-      // Change Branch when selecting one of the branch options
-      item.addSelectionListener(
-          new SelectionAdapter() {
-            @Override
-            public void widgetSelected(SelectionEvent e) {
-              MenuItem item = (MenuItem) e.widget;
-              git.checkout(item.getText());
-              // Refresh the tree, change colors...
-              //
-              ExplorerPerspective.getInstance().refresh();
-            }
-          });
+    if (git == null) {
+      return menu;
     }
 
-    menu.setVisible(true);
+    try {
+      // Create context menu...
+      //
+      GuiMenuWidgets menuWidgets = new GuiMenuWidgets();
+      menuWidgets.registerGuiPluginObject(this);
+      menuWidgets.createMenuWidgets(ID_CONTEXT_MENU_GIT, shell, menu);
+
+      new MenuItem(menu, SWT.SEPARATOR);
+
+      // Add all known branches to the list
+      // int count = 0;
+      String currentBranch = git.getBranch();
+      for (String name : git.getBranches()) {
+        MenuItem item = new MenuItem(menu, SWT.CHECK);
+        item.setText(name);
+        // If the item is the active branch, mark it as checked
+        item.setSelection(currentBranch.equals(name));
+        // Change Branch when selecting one of the branch options
+        item.addListener(SWT.Selection, e -> gitCheckoutBranch(name));
+
+        // if (++count == 10) break;
+      }
+
+      // TODO: display only the last 10 used branches
+      // if (count == 10) {
+      // new MenuItem(menu, SWT.SEPARATOR);
+      // MenuItem menuItem = new MenuItem(menu, SWT.PUSH);
+      // menuItem.setText("More...");
+      // }
+    } catch (Exception e) {
+      new ErrorDialog(
+          shell,
+          BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.Branch.Header"),
+          BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.Branch.Message"),
+          e);
+    }
+
+    return menu;
   }
 
   @GuiMenuElement(
@@ -527,13 +475,15 @@ public class GitGuiPlugin
           for (int selectedNr : selectedNrs) {
             String file = files[selectedNr];
             git.revertPath(file);
+
+            MessageBox box =
+                new MessageBox(HopGui.getInstance().getShell(), SWT.OK | SWT.ICON_INFORMATION);
+            box.setText(BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.FilesReverted.Header"));
+            box.setMessage(
+                BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.FilesReverted.Message"));
+            box.open();
           }
         }
-        MessageBox box =
-            new MessageBox(HopGui.getInstance().getShell(), SWT.OK | SWT.ICON_INFORMATION);
-        box.setText(BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.FilesReverted.Header"));
-        box.setMessage(BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.FilesReverted.Message"));
-        box.open();
       }
     } catch (Exception e) {
       new ErrorDialog(
@@ -549,8 +499,147 @@ public class GitGuiPlugin
     enableButtons();
   }
 
-  private String calculateRelativePath(String directory, ExplorerFile explorerFile) {
+  @GuiMenuElement(
+      root = ID_CONTEXT_MENU_GIT,
+      parentId = ID_CONTEXT_MENU_GIT,
+      id = CONTEXT_MENU_GIT_CREATE_BRANCH,
+      label = "i18n::GitGuiPlugin.Menu.Branch.Create.Text",
+      image = "ui/images/add.svg")
+  public void gitCreateBranch() {
+    EnterStringDialog enterStringDialog =
+        new EnterStringDialog(
+            HopGui.getInstance().getShell(),
+            "",
+            BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.Branch.CreateBranch.Header"),
+            BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.Branch.CreateBranch.Message"));
+    String message = enterStringDialog.open();
+    if (message != null) {
+      boolean branchCreated = git.createBranch(message);
+      if (branchCreated) {
+        MessageBox pullSuccessful =
+            new MessageBox(HopGui.getInstance().getShell(), SWT.ICON_INFORMATION);
+        pullSuccessful.setText(
+            BaseMessages.getString(
+                PKG, "GitGuiPlugin.Dialog.Branch.CreateBranchSuccessFul.Header"));
+        pullSuccessful.setMessage(
+            BaseMessages.getString(
+                PKG, "GitGuiPlugin.Dialog.Branch.CreateBranchSuccessFul.Message"));
+        pullSuccessful.open();
+      }
+      // Refresh the tree, change colors...
+      //
+      ExplorerPerspective.getInstance().refresh();
+    }
+  }
 
+  @GuiMenuElement(
+      root = ID_CONTEXT_MENU_GIT,
+      parentId = ID_CONTEXT_MENU_GIT,
+      id = CONTEXT_MENU_GIT_RENAME_BRANCH,
+      label = "i18n::GitGuiPlugin.Menu.Branch.Rename.Text",
+      image = "ui/images/rename.svg")
+  public void gitRenameBranch() {
+    String oldName = getGitToolItem().getText();
+    EnterStringDialog enterStringDialog =
+        new EnterStringDialog(
+            HopGui.getInstance().getShell(),
+            oldName,
+            BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.Branch.RenameBranch.Header"),
+            BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.Branch.RenameBranch.Message"));
+    String newName = enterStringDialog.open();
+    if (!Utils.isEmpty(newName) && !newName.equals(oldName)) {
+      boolean renamed = git.renameBranch(oldName, newName);
+      if (renamed) {
+        this.setBranchLabel(newName);
+      }
+    }
+  }
+
+  @GuiMenuElement(
+      root = ID_CONTEXT_MENU_GIT,
+      parentId = ID_CONTEXT_MENU_GIT,
+      id = CONTEXT_MENU_GIT_MERGE_BRANCH,
+      label = "i18n::GitGuiPlugin.Menu.Branch.Merge.Text",
+      image = "merge.svg")
+  public void gitMergeBranch() {
+    List<String> branches = git.getBranches();
+    EnterSelectionDialog selectionDialog =
+        new EnterSelectionDialog(
+            HopGui.getInstance().getShell(),
+            branches.toArray(new String[0]),
+            BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.Branch.MergeBranch.Header"),
+            BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.Branch.MergeBranch.Message"));
+    String branchToMerge = selectionDialog.open();
+    if (branchToMerge != null) {
+      try {
+        boolean branchMerged = git.mergeBranch(branchToMerge, MergeStrategy.RECURSIVE);
+        if (branchMerged) {
+          MessageBox mergeSuccessful =
+              new MessageBox(HopGui.getInstance().getShell(), SWT.ICON_INFORMATION);
+          mergeSuccessful.setText(
+              BaseMessages.getString(
+                  PKG, "GitGuiPlugin.Dialog.Branch.MergeBranchSuccessFul.Header"));
+          mergeSuccessful.setMessage(
+              BaseMessages.getString(
+                  PKG, "GitGuiPlugin.Dialog.Branch.MergeBranchSuccessFul.Message"));
+          mergeSuccessful.open();
+        }
+      } catch (Exception ex) {
+        new ErrorDialog(
+            HopGui.getInstance().getShell(),
+            BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.MergeBranchError.Header"),
+            BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.MergeBranchError.Message"),
+            ex);
+      }
+      // Refresh the tree, change colors...
+      //
+      ExplorerPerspective.getInstance().refresh();
+    }
+  }
+
+  private void gitCheckoutBranch(String name) {
+    git.checkout(name);
+
+    // Refresh the tree, change colors...
+    //
+    ExplorerPerspective.getInstance().refresh();
+  }
+
+  @GuiMenuElement(
+      root = ID_CONTEXT_MENU_GIT,
+      parentId = ID_CONTEXT_MENU_GIT,
+      id = CONTEXT_MENU_GIT_DELETE_BRANCH,
+      label = "i18n::GitGuiPlugin.Menu.Branch.Delete.Text",
+      image = "ui/images/delete.svg")
+  public void gitDeleteBranch() {
+    List<String> branches = git.getBranches();
+    EnterSelectionDialog selectionDialog =
+        new EnterSelectionDialog(
+            HopGui.getInstance().getShell(),
+            branches.toArray(new String[0]),
+            BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.Branch.DeleteBranch.Header"),
+            BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.Branch.DeleteBranch.Message"));
+    String branchToDelete = selectionDialog.open();
+    if (branchToDelete != null) {
+      boolean branchDeleted = git.deleteBranch(branchToDelete, true);
+      if (branchDeleted) {
+        MessageBox pullSuccessful =
+            new MessageBox(HopGui.getInstance().getShell(), SWT.ICON_INFORMATION);
+        pullSuccessful.setText(
+            BaseMessages.getString(
+                PKG, "GitGuiPlugin.Dialog.Branch.DeleteBranchSuccessFul.Header"));
+        pullSuccessful.setMessage(
+            BaseMessages.getString(
+                PKG, "GitGuiPlugin.Dialog.Branch.DeleteBranchSuccessFul.Message"));
+        pullSuccessful.open();
+      }
+      // Refresh the tree, change colors...
+      //
+      ExplorerPerspective.getInstance().refresh();
+    }
+  }
+
+  private String calculateRelativePath(String directory, ExplorerFile explorerFile) {
     try {
       FileObject file = HopVfs.getFileObject(explorerFile.getFilename());
       FileObject root = HopVfs.getFileObject(directory);
@@ -666,7 +755,7 @@ public class GitGuiPlugin
     boolean isGit = git != null;
     boolean isSelected = isGit && getSelectedFile() != null;
 
-    GuiToolbarWidgets toolBarWidgets = ExplorerPerspective.getToolBarWidgets();
+    GuiToolbarWidgets toolBarWidgets = ExplorerPerspective.getInstance().getToolBarWidgets();
     toolBarWidgets.enableToolbarItem(TOOLBAR_ITEM_GIT_INFO, isGit);
     toolBarWidgets.enableToolbarItem(TOOLBAR_ITEM_ADD, isSelected);
     toolBarWidgets.enableToolbarItem(TOOLBAR_ITEM_REVERT, isSelected);
@@ -679,6 +768,8 @@ public class GitGuiPlugin
     menuWidgets.enableMenuItem(CONTEXT_MENU_GIT_ADD, isSelected);
     menuWidgets.enableMenuItem(CONTEXT_MENU_GIT_COMMIT, isSelected);
     menuWidgets.enableMenuItem(CONTEXT_MENU_GIT_REVERT, isSelected);
+
+    getGitToolItem().setEnabled(isGit);
   }
 
   /**
@@ -753,40 +844,23 @@ public class GitGuiPlugin
     activeFile.setFileType(fileType);
     GitInfoExplorerFileTypeHandler fileTypeHandler =
         fileType.createFileTypeHandler(HopGui.getInstance(), explorerPerspective, activeFile);
-    activeFile.setFileTypeHandler(fileTypeHandler);
 
-    explorerPerspective.addFile(activeFile);
+    explorerPerspective.addFile(fileTypeHandler);
   }
 
   public UIGit getGit() {
     return git;
   }
 
-  /**
-   * Gets changed files
-   *
-   * @return map of changed files
-   */
-  public Map<String, UIFile> getChangedFiles() {
-    return changedFiles;
-  }
-
-  /**
-   * Gets ignored files
-   *
-   * @return map of ignored files
-   */
-  public Map<String, String> getIgnoredFiles() {
-    return ignoredFiles;
+  private static ToolItem getGitToolItem() {
+    return HopGui.getInstance().getStatusToolbarWidgets().findToolItem(ID_TOOLBAR_ITEM_GIT);
   }
 
   private void setBranchLabel(String branch) {
     // Set the branch name
-    GuiToolbarWidgets widgets = ExplorerPerspective.getToolBarWidgets();
-    Map<String, Control> widgetsMap = widgets.getWidgetsMap();
-    CLabel branchLabel = (CLabel) widgetsMap.get(TOOLBAR_ITEM_BRANCH);
-    branchLabel.setText(
-        BaseMessages.getString(PKG, "GitGuiPlugin.Dialog.Branch.BranchName", NVL(branch, "")));
-    branchLabel.setEnabled(branch != null);
+    ToolItem item = getGitToolItem();
+    if (item != null && !item.isDisposed()) {
+      item.setText(Const.NVL(branch, ""));
+    }
   }
 }

@@ -25,6 +25,7 @@ import org.apache.hop.core.database.DatabaseMeta;
 import org.apache.hop.core.exception.HopException;
 import org.apache.hop.core.row.IRowMeta;
 import org.apache.hop.core.row.IValueMeta;
+import org.apache.hop.core.util.Utils;
 import org.apache.hop.core.variables.IVariables;
 import org.apache.hop.i18n.BaseMessages;
 import org.apache.hop.pipeline.PipelineMeta;
@@ -110,11 +111,10 @@ public class JdbcMetadataDialog extends BaseTransformDialog {
           || control == argumentSourceFields
           || control == removeArgumentFieldsLabel
           || control == removeArgumentFieldsButton) continue;
-      if (control instanceof ComboVar comboVar) {
-        if (!control.isDisposed()
-            && (comboVar.getText() != null || comboVar.getText().length() > 0)) {
-          currentValues.add(((ComboVar) control).getText());
-        }
+      if (control instanceof ComboVar comboVar
+          && !control.isDisposed()
+          && (comboVar.getText() != null || !comboVar.getText().isEmpty())) {
+        currentValues.add(((ComboVar) control).getText());
       }
       if (!control.isDisposed()) {
         logDebug("removeArgumentsUI - Disposing control!");
@@ -638,7 +638,7 @@ public class JdbcMetadataDialog extends BaseTransformDialog {
     if (value != null) setMethod(value);
 
     argumentSourceFields.setSelection(input.isArgumentSourceFields());
-    if (input.getArguments() != null && !input.getArguments().isEmpty()) {
+    if (!Utils.isEmpty(input.getArguments())) {
       methodUpdated(input.getArguments());
     } else {
       // If no arguments' values are saved build the arguments' list without assigning any values
@@ -646,7 +646,7 @@ public class JdbcMetadataDialog extends BaseTransformDialog {
     }
 
     logDebug("Calling methodUpdated from populate dialog.");
-    if (input.getOutputFields() != null && !input.getOutputFields().isEmpty()) {
+    if (!Utils.isEmpty(input.getOutputFields())) {
       updateOutputFields(input.getOutputFields());
     }
 

@@ -182,6 +182,9 @@ public class Const {
       description = "The operating system the hop platform runs on.")
   public static final String HOP_PLATFORM_OS = "HOP_PLATFORM_OS";
 
+  /** Variable containing the current hop version in pipelines and workflows */
+  public static final String HOP_VERSION = "HOP_VERSION";
+
   /** The runtime that is being used */
   @Variable(scope = VariableScope.SYSTEM, description = "The runtime that is being used.")
   public static final String HOP_PLATFORM_RUNTIME = "HOP_PLATFORM_RUNTIME";
@@ -415,10 +418,6 @@ public class Const {
 
   /** UI-agnostic flag for warnings */
   public static final int INFO = 3;
-
-  public static final int SHOW_MESSAGE_DIALOG_DB_TEST_DEFAULT = 0;
-
-  public static final int SHOW_MESSAGE_DIALOG_DB_TEST_SUCCESS = 1;
 
   /** The margin between the text of a note and its border. */
   public static final int NOTE_MARGIN = 5;
@@ -890,6 +889,13 @@ public class Const {
   public static final String HOP_ZIP_MAX_TEXT_SIZE = "HOP_ZIP_MAX_TEXT_SIZE";
 
   /**
+   * A variable to configure if we should calculate the last modification date of a folder object
+   * for Google Cloud Storage.
+   */
+  public static final String HOP_GCP_GET_FOLDER_LASTMODIFICATION_DATE =
+      "HOP_GCP_GET_FOLDER_LASTMODIFICATION_DATE";
+
+  /**
    * The default value for the {@link #HOP_ZIP_MAX_TEXT_SIZE} as a Long.
    *
    * @see #HOP_ZIP_MAX_TEXT_SIZE
@@ -951,6 +957,31 @@ public class Const {
       description = "This is the default polling frequency for the transforms input buffer (in ms)")
   public static final String HOP_DEFAULT_BUFFER_POLLING_WAITTIME =
       "HOP_DEFAULT_BUFFER_POLLING_WAITTIME";
+
+  /**
+   * If you don't want to see the hexadecimal representation of binary fields in preview windows,
+   * for example if you're dealing with CLOB database fields, set this variable to true.
+   */
+  @Variable(
+      scope = VariableScope.APPLICATION,
+      value = "false",
+      description =
+          "Display the original content of binary fields during preview, not its hexadecimal value.")
+  public static final String HOP_BINARY_FIELDS_AVOID_HEX_PREVIEW =
+      "HOP_BINARY_FIELDS_AVOID_HEX_PREVIEW";
+
+  /**
+   * If for some reason the table columns are a bit too narrow, you can give it a bit of extra with
+   * manually.
+   */
+  @Variable(
+      scope = VariableScope.APPLICATION,
+      value = "0",
+      description =
+          "If for some reason the table columns are a bit too narrow, "
+              + "you can give it a bit of extra with manually. (in pixels)")
+  public static final String HOP_TABLE_VIEW_EXTRA_COLUMN_MARGIN =
+      "HOP_TABLE_VIEW_EXTRA_COLUMN_MARGIN";
 
   /**
    * rounds double f to any number of places after decimal point Does arithmetic using BigDecimal
@@ -1334,10 +1365,10 @@ public class Const {
   public static void repl(StringBuffer str, String code, String repl) {
     if ((code == null)
         || (repl == null)
-        || (code.length() == 0)
-        || (repl.length() == 0)
+        || (code.isEmpty())
+        || (repl.isEmpty())
         || (str == null)
-        || (str.length() == 0)) {
+        || (str.isEmpty())) {
       return; // do nothing
     }
     String aString = str.toString();
@@ -1808,7 +1839,7 @@ public class Const {
    * @return source if source is not null, otherwise return def
    */
   public static String NVL(String source, String def) {
-    if (source == null || source.length() == 0) {
+    if (source == null || source.isEmpty()) {
       return def;
     }
     return source;
@@ -1964,7 +1995,7 @@ public class Const {
      */
     List<String> list = new ArrayList<>();
 
-    if (string == null || string.length() == 0) {
+    if (string == null || string.isEmpty()) {
       return new String[] {};
     }
 
@@ -2024,7 +2055,7 @@ public class Const {
      */
     List<String> list = new ArrayList<>();
 
-    if (string == null || string.length() == 0) {
+    if (string == null || string.isEmpty()) {
       return new String[] {};
     }
 
@@ -2076,7 +2107,7 @@ public class Const {
 
     // Check for empty paths...
     //
-    if (path == null || path.length() == 0 || path.equals(separator)) {
+    if (path == null || path.isEmpty() || path.equals(separator)) {
       return new String[] {};
     }
 
@@ -2113,7 +2144,7 @@ public class Const {
     //
     // a --> { a }
     //
-    if (spath.length == 0 && path.length() > 0) {
+    if (spath.length == 0 && !path.isEmpty()) {
       spath = new String[] {path};
     }
 
@@ -2693,7 +2724,7 @@ public class Const {
    * @return cleaned string
    */
   public static String removeCRLF(String in) {
-    if ((in != null) && (in.length() > 0)) {
+    if ((in != null) && (!in.isEmpty())) {
       int inLen = in.length();
       int posn = 0;
       char[] tmp = new char[inLen];
@@ -2720,7 +2751,7 @@ public class Const {
    * @return cleaned string
    */
   public static String removeChar(String in, char badChar) {
-    if ((in != null) && (in.length() > 0)) {
+    if ((in != null) && (!in.isEmpty())) {
       int inLen = in.length();
       int posn = 0;
       char[] tmp = new char[inLen];
@@ -2810,7 +2841,7 @@ public class Const {
    * @return number of occurrences
    */
   public static int getOccurenceString(String string, String searchFor) {
-    if (string == null || string.length() == 0) {
+    if (string == null || string.isEmpty()) {
       return 0;
     }
     int counter = 0;
@@ -2856,7 +2887,7 @@ public class Const {
    * @return number of occurrences
    */
   public static int getOcuranceString(String string, String searchFor) {
-    if (string == null || string.length() == 0) {
+    if (string == null || string.isEmpty()) {
       return 0;
     }
     Pattern p = Pattern.compile(searchFor);

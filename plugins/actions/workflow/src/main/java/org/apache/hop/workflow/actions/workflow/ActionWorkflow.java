@@ -230,7 +230,7 @@ public class ActionWorkflow extends ActionBase implements Cloneable, IAction {
         SimpleDateFormat sdf = new SimpleDateFormat("HHmmss");
         retval += "_" + sdf.format(cal.getTime());
       }
-      if (logext != null && logext.length() > 0) {
+      if (!Utils.isEmpty(logext)) {
         retval += "." + logext;
       }
     }
@@ -455,10 +455,7 @@ public class ActionWorkflow extends ActionBase implements Cloneable, IAction {
         workflow.setResult(result);
         workflow.setInternalHopVariables();
         workflow.copyParametersFromDefinitions(workflowMeta);
-        workflow.setInteractive(parentWorkflow.isInteractive());
-        if (workflow.isInteractive()) {
-          workflow.getActionListeners().addAll(parentWorkflow.getActionListeners());
-        }
+        workflow.getActionListeners().addAll(parentWorkflow.getActionListeners());
 
         // Set the parameters calculated above on this instance.
         //
@@ -540,7 +537,7 @@ public class ActionWorkflow extends ActionBase implements Cloneable, IAction {
 
           // if one of them fails (in the loop), increase the number of errors
           //
-          if (oneResult.getResult() == false) {
+          if (oneResult.isResult() == false) {
             result.setNrErrors(result.getNrErrors() + 1);
           }
         }
@@ -554,35 +551,29 @@ public class ActionWorkflow extends ActionBase implements Cloneable, IAction {
       result.setNrErrors(1L);
     }
 
-    if (setLogfile) {
-      if (logChannelFileWriter != null) {
-        logChannelFileWriter.stopLogging();
+    if (setLogfile && logChannelFileWriter != null) {
+      logChannelFileWriter.stopLogging();
 
-        ResultFile resultFile =
-            new ResultFile(
-                ResultFile.FILE_TYPE_LOG,
-                logChannelFileWriter.getLogFile(),
-                parentWorkflow.getWorkflowName(),
-                getName());
-        result.getResultFiles().put(resultFile.getFile().toString(), resultFile);
+      ResultFile resultFile =
+          new ResultFile(
+              ResultFile.FILE_TYPE_LOG,
+              logChannelFileWriter.getLogFile(),
+              parentWorkflow.getWorkflowName(),
+              getName());
+      result.getResultFiles().put(resultFile.getFile().toString(), resultFile);
 
-        // See if anything went wrong during file writing...
-        //
-        if (logChannelFileWriter.getException() != null) {
-          logError("Unable to open log file [" + getLogFilename() + "] : ");
-          logError(Const.getStackTracker(logChannelFileWriter.getException()));
-          result.setNrErrors(1);
-          result.setResult(false);
-          return result;
-        }
+      // See if anything went wrong during file writing...
+      //
+      if (logChannelFileWriter.getException() != null) {
+        logError("Unable to open log file [" + getLogFilename() + "] : ");
+        logError(Const.getStackTracker(logChannelFileWriter.getException()));
+        result.setNrErrors(1);
+        result.setResult(false);
+        return result;
       }
     }
 
-    if (result.getNrErrors() > 0) {
-      result.setResult(false);
-    } else {
-      result.setResult(true);
-    }
+    result.setResult(result.getNrErrors() <= 0);
 
     return result;
   }

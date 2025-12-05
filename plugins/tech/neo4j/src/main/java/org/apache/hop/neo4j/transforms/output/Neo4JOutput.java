@@ -486,6 +486,8 @@ public class Neo4JOutput extends BaseNeoTransform<Neo4JOutputMeta, Neo4JOutputDa
               .append(Const.CR);
           updateUsageMap(List.of(data.relationshipLabel), GraphUsage.RELATIONSHIP_CREATE);
           break;
+        default:
+          break;
       }
 
       data.cypher = cypher.toString();
@@ -517,7 +519,7 @@ public class Neo4JOutput extends BaseNeoTransform<Neo4JOutputMeta, Neo4JOutputDa
 
     for (int i = 0; i < nodePropertyFields.size(); i++) {
       if (nodePropertyFields.get(i).isPropertyPrimary()) {
-        if (clause.length() > 0) {
+        if (!clause.isEmpty()) {
           clause.append(", ");
         }
         clause
@@ -527,7 +529,7 @@ public class Neo4JOutput extends BaseNeoTransform<Neo4JOutputMeta, Neo4JOutputDa
       }
     }
 
-    if (clause.length() == 0) {
+    if (clause.isEmpty()) {
       return "";
     } else {
       return "{ " + clause + " }";
@@ -540,7 +542,7 @@ public class Neo4JOutput extends BaseNeoTransform<Neo4JOutputMeta, Neo4JOutputDa
 
     for (int i = 0; i < propertyFields.size(); i++) {
       if (!propertyFields.get(i).isPropertyPrimary()) {
-        if (clause.length() > 0) {
+        if (!clause.isEmpty()) {
           clause.append(", ");
         }
         clause
@@ -552,7 +554,7 @@ public class Neo4JOutput extends BaseNeoTransform<Neo4JOutputMeta, Neo4JOutputDa
       }
     }
 
-    if (clause.length() == 0) {
+    if (clause.isEmpty()) {
       return "";
     } else {
       return "SET " + clause;
@@ -745,14 +747,14 @@ public class Neo4JOutput extends BaseNeoTransform<Neo4JOutputMeta, Neo4JOutputDa
 
       // Part of the key...
       if (nodeField.getProperties().get(i).isPropertyPrimary()) {
-        if (nodeId.length() > 0) {
+        if (!nodeId.isEmpty()) {
           nodeId.append("-");
         }
         nodeId.append(valueMeta.getString(valueData));
       }
     }
 
-    if (nodeId.length() > 0) {
+    if (!nodeId.isEmpty()) {
       nodeData.setId(nodeId.toString());
     }
 
@@ -940,7 +942,7 @@ public class Neo4JOutput extends BaseNeoTransform<Neo4JOutputMeta, Neo4JOutputDa
 
   private void wrapUpTransaction() throws HopException {
 
-    if (!isStopped() && data.unwindList != null && !data.unwindList.isEmpty()) {
+    if (!isStopped() && !Utils.isEmpty(data.unwindList)) {
       emptyUnwindList(); // force write!
     }
 

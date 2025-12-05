@@ -90,7 +90,7 @@ public class SortedFileOutputStream extends FileOutputStream {
    */
   @Override
   public void close() throws IOException {
-    if (sb == null || sb.length() == 0) {
+    if (Utils.isEmpty(sb)) {
       super.flush();
       super.close();
     }
@@ -102,7 +102,7 @@ public class SortedFileOutputStream extends FileOutputStream {
     Vector<String> lines = new Vector<>();
     while (sLine != null) {
       // Length 0 -> do nothing
-      if (sLine.length() == 0) {
+      if (sLine.isEmpty()) {
         sLine = nextLine(iPos);
         continue;
       }
@@ -174,14 +174,12 @@ public class SortedFileOutputStream extends FileOutputStream {
 
       // If now we have '\r' or '\n' and they are escaped, we just read the next
       // character. For this at least two characters must have been read.
-      if (iPos[0] >= 2) {
-        // Is it an escaped '\r' or '\n'?
-        if ((c == '\n' || c == '\r') && (iPos[0] - 2 == '\\')) {
-          // Yes! Just read next character, if not end of stream reached
-          if (iPos[0] < sb.length()) {
-            c = sb.charAt(iPos[0]++);
-          }
-        }
+      // Is it an escaped '\r' or '\n'?
+      // Yes! Just read next character, if not end of stream reached
+      if (iPos[0] >= 2
+          && ((c == '\n' || c == '\r') && (iPos[0] - 2 == '\\'))
+          && (iPos[0] < sb.length())) {
+        c = sb.charAt(iPos[0]++);
       }
     }
 

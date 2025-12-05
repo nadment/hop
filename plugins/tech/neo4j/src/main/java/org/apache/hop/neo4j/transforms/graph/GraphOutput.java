@@ -35,6 +35,7 @@ import org.apache.hop.core.exception.HopValueException;
 import org.apache.hop.core.row.IRowMeta;
 import org.apache.hop.core.row.IValueMeta;
 import org.apache.hop.core.row.RowDataUtil;
+import org.apache.hop.core.util.Utils;
 import org.apache.hop.metadata.api.IHopMetadataSerializer;
 import org.apache.hop.neo4j.core.GraphUsage;
 import org.apache.hop.neo4j.core.data.GraphData;
@@ -421,13 +422,9 @@ public class GraphOutput extends BaseNeoTransform<GraphOutputMeta, GraphOutputDa
         data.nodeMappingIndexes.add(index);
       }
 
-      if (!meta.isReturningGraph()) {
-
-        // See if we need to create indexes...
-        //
-        if (meta.isCreatingIndexes()) {
-          createNodePropertyIndexes(meta, data);
-        }
+      // See if we need to create indexes...
+      if (!meta.isReturningGraph() && meta.isCreatingIndexes()) {
+        createNodePropertyIndexes(meta, data);
       }
 
       data.relationshipsCache = new HashMap<>();
@@ -591,7 +588,7 @@ public class GraphOutput extends BaseNeoTransform<GraphOutputMeta, GraphOutputDa
 
     // See if there's actual work to be done...
     //
-    if (data.unwindCount == 0 || data.unwindMapList == null || data.unwindMapList.isEmpty()) {
+    if (data.unwindCount == 0 || Utils.isEmpty(data.unwindMapList)) {
       return false;
     }
 
@@ -800,17 +797,17 @@ public class GraphOutput extends BaseNeoTransform<GraphOutputMeta, GraphOutputDa
           String targetNodeName = "node" + nodeIndexMap.get(targetNode);
           String relationshipAlias = "rel" + relationshipIndex;
 
-          cypher.append(
-              "MERGE("
-                  + sourceNodeName
-                  + ")-["
-                  + relationshipAlias
-                  + ":"
-                  + relationship.getLabel()
-                  + "]->("
-                  + targetNodeName
-                  + ") ");
-          cypher.append(Const.CR);
+          cypher
+              .append("MERGE(")
+              .append(sourceNodeName)
+              .append(")-[")
+              .append(relationshipAlias)
+              .append(":")
+              .append(relationship.getLabel())
+              .append("]->(")
+              .append(targetNodeName)
+              .append(")")
+              .append(Const.CR);
 
           // Also add the optional property updates...
           //
@@ -846,8 +843,7 @@ public class GraphOutput extends BaseNeoTransform<GraphOutputMeta, GraphOutputDa
               Object sourceFieldValue = row[propFieldIndex];
               boolean isNull = sourceFieldMeta.isNull(sourceFieldValue);
 
-              cypher.append(relationshipAlias + "." + relProp.getName());
-              cypher.append(" = ");
+              cypher.append(relationshipAlias).append(".").append(relProp.getName()).append(" = ");
               if (isNull) {
                 cypher.append("NULL");
               } else {
@@ -894,22 +890,20 @@ public class GraphOutput extends BaseNeoTransform<GraphOutputMeta, GraphOutputDa
     //
     Set<SelectedNode> ignored = new HashSet<>();
     for (NodeAndPropertyData nodeProperty : nodeProperties) {
-      if (nodeProperty.property.isPrimary()) {
+      if (nodeProperty.property.isPrimary()
+          && nodeProperty.sourceValueMeta.isNull(nodeProperty.sourceValueData)) {
         // Null value?
-        //
-        if (nodeProperty.sourceValueMeta.isNull(nodeProperty.sourceValueData)) {
-          if (isDebug()) {
-            logDebug(
-                "Detected primary null property for node "
-                    + nodeProperty.node
-                    + " property "
-                    + nodeProperty.property
-                    + " value : "
-                    + nodeProperty.sourceValueMeta.getString(nodeProperty.sourceValueData));
-          }
-
-          ignored.add(nodeProperty.node);
+        if (isDebug()) {
+          logDebug(
+              "Detected primary null property for node "
+                  + nodeProperty.node
+                  + " property "
+                  + nodeProperty.property
+                  + " value : "
+                  + nodeProperty.sourceValueMeta.getString(nodeProperty.sourceValueData));
         }
+
+        ignored.add(nodeProperty.node);
       }
     }
 
@@ -935,7 +929,7 @@ public class GraphOutput extends BaseNeoTransform<GraphOutputMeta, GraphOutputDa
         // For performance this uses a hashmaps to cache these graph model lookups.
         //
         List<GraphRelationship> relationships = findRelationships(sourceNodeName, targetNodeName);
-        if (relationships == null || relationships.isEmpty()) {
+        if (Utils.isEmpty(relationships)) {
           continue;
         }
 
@@ -1355,7 +1349,7 @@ public class GraphOutput extends BaseNeoTransform<GraphOutputMeta, GraphOutputDa
 
     // Add a SET clause if there are any non-primary key fields to update
     //
-    if (matchCypher.length() > 0) {
+    if (!matchCypher.isEmpty()) {
       cypher.append(matchCypher).append(Const.CR);
     }
   }
@@ -1543,23 +1537,22 @@ public class GraphOutput extends BaseNeoTransform<GraphOutputMeta, GraphOutputDa
       throws HopValueException {
     Set<SelectedNode> ignored = new HashSet<>();
     for (NodeAndPropertyData nodeProperty : nodeProperties) {
-      if (nodeProperty.property.isPrimary()) {
+      if (nodeProperty.property.isPrimary()
+          && nodeProperty.sourceValueMeta.isNull(nodeProperty.sourceValueData)) {
         // Null value?
         //
-        if (nodeProperty.sourceValueMeta.isNull(nodeProperty.sourceValueData)) {
-          if (isDebug()) {
-            logDebug(
-                "Detected primary null property for node "
-                    + nodeProperty.node
-                    + " property "
-                    + nodeProperty.property
-                    + " value : "
-                    + nodeProperty.sourceValueMeta.getString(nodeProperty.sourceValueData));
-          }
+        if (isDebug()) {
+          logDebug(
+              "Detected primary null property for node "
+                  + nodeProperty.node
+                  + " property "
+                  + nodeProperty.property
+                  + " value : "
+                  + nodeProperty.sourceValueMeta.getString(nodeProperty.sourceValueData));
+        }
 
-          if (!ignored.contains(nodeProperty.node)) {
-            ignored.add(nodeProperty.node);
-          }
+        if (!ignored.contains(nodeProperty.node)) {
+          ignored.add(nodeProperty.node);
         }
       }
     }
@@ -1635,15 +1628,12 @@ public class GraphOutput extends BaseNeoTransform<GraphOutputMeta, GraphOutputDa
     StringBuffer id = new StringBuffer();
 
     for (NodeAndPropertyData napd : nodeProperties) {
-      if (napd.node.equals(node)) {
-        if (napd.property.isPrimary()) {
-
-          String propertyString = napd.sourceValueMeta.getString(napd.sourceValueData);
-          if (id.length() > 0) {
-            id.append("-");
-          }
-          id.append(propertyString);
+      if (napd.node.equals(node) && napd.property.isPrimary()) {
+        String propertyString = napd.sourceValueMeta.getString(napd.sourceValueData);
+        if (!id.isEmpty()) {
+          id.append("-");
         }
+        id.append(propertyString);
       }
     }
     return id.toString();

@@ -80,6 +80,7 @@ public enum HopMetadataPropertyType {
 
   // REST
   REST_CONNECTION,
+  SALESFORCE_CONNECTION,
 
   // MAIL
   MAIL_SERVER_CONNECTION,
@@ -95,5 +96,7 @@ public enum HopMetadataPropertyType {
   STATIC_SCHEMA_DEFINITION,
 
   // VFS
+  VFS_GCP_CONNECTION,
   VFS_AZURE_CONNECTION,
+  VFS_MINIO_CONNECTION,
 }

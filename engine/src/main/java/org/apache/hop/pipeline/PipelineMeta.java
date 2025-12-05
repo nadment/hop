@@ -37,6 +37,7 @@ import org.apache.hop.base.AbstractMeta;
 import org.apache.hop.base.BaseHopMeta;
 import org.apache.hop.core.CheckResult;
 import org.apache.hop.core.Const;
+import org.apache.hop.core.HopVersionProvider;
 import org.apache.hop.core.ICheckResult;
 import org.apache.hop.core.IProgressMonitor;
 import org.apache.hop.core.NotePadMeta;
@@ -720,13 +721,12 @@ public class PipelineMeta extends AbstractMeta
       TransformMeta from, TransformMeta to, boolean disabledToo) {
     for (int i = 0; i < nrPipelineHops(); i++) {
       PipelineHopMeta hi = getPipelineHop(i);
-      if (hi.isEnabled() || disabledToo) {
-        if (hi.getFromTransform() != null
-            && hi.getToTransform() != null
-            && hi.getFromTransform().equals(from)
-            && hi.getToTransform().equals(to)) {
-          return hi;
-        }
+      if ((hi.isEnabled() || disabledToo)
+          && hi.getFromTransform() != null
+          && hi.getToTransform() != null
+          && hi.getFromTransform().equals(from)
+          && hi.getToTransform().equals(to)) {
+        return hi;
       }
     }
     return null;
@@ -806,12 +806,11 @@ public class PipelineMeta extends AbstractMeta
       for (PipelineHopMeta hi : hops) {
         if (hi.getToTransform() != null
             && hi.isEnabled()
-            && hi.getToTransform().equals(transformMeta)) {
+            && hi.getToTransform().equals(transformMeta)
+            && (info || !isTransformInformative(transformMeta, hi.getFromTransform()))) {
           // Check if this previous transform isn't informative (StreamValueLookup)
           // We don't want fields from this stream to show up!
-          if (info || !isTransformInformative(transformMeta, hi.getFromTransform())) {
-            previousTransforms.add(hi.getFromTransform());
-          }
+          previousTransforms.add(hi.getFromTransform());
         }
       }
       previousTransformCache.put(cacheKey, previousTransforms);
@@ -864,12 +863,11 @@ public class PipelineMeta extends AbstractMeta
       if (hi != null
           && hi.getToTransform() != null
           && hi.isEnabled()
-          && hi.getToTransform().equals(transformMeta)) {
+          && hi.getToTransform().equals(transformMeta)
+          && isTransformInformative(transformMeta, hi.getFromTransform())) {
         // Check if this previous transform isn't informative (StreamValueLookup)
         // We don't want fields from this stream to show up!
-        if (isTransformInformative(transformMeta, hi.getFromTransform())) {
-          count++;
-        }
+        count++;
       }
     }
     return count;
@@ -1023,10 +1021,8 @@ public class PipelineMeta extends AbstractMeta
     for (int i = s - 1; i >= 0; i--) { // Back to front because drawing goes from start to end
       TransformMeta transformMeta = transforms.get(i);
       Point p = transformMeta.getLocation();
-      if (p != null) {
-        if (x >= p.x && x <= p.x + iconsize && y >= p.y && y <= p.y + iconsize + 20) {
-          return transformMeta;
-        }
+      if (p != null && x >= p.x && x <= p.x + iconsize && y >= p.y && y <= p.y + iconsize + 20) {
+        return transformMeta;
       }
     }
     return null;
@@ -2046,18 +2042,22 @@ public class PipelineMeta extends AbstractMeta
    *
    * @return true if the transforms have been changed, false otherwise
    */
+  @Override
+  public boolean hasChanged() {
+    return super.hasChanged() || haveTransformsChanged() || haveHopsChanged();
+  }
+
   public boolean haveTransformsChanged() {
     if (changedTransforms) {
       return true;
     }
 
     for (int i = 0; i < nrTransforms(); i++) {
-      TransformMeta transformMeta = getTransform(i);
-      if (transformMeta.hasChanged()) {
+      if (getTransform(i).hasChanged()) {
         return true;
       }
-      if (transformMeta.getTransformPartitioningMeta() != null
-          && transformMeta.getTransformPartitioningMeta().hasChanged()) {
+      if (getTransform(i).getTransformPartitioningMeta() != null
+          && getTransform(i).getTransformPartitioningMeta().hasChanged()) {
         return true;
       }
     }
@@ -2081,16 +2081,6 @@ public class PipelineMeta extends AbstractMeta
       }
     }
     return false;
-  }
-
-  /**
-   * Checks whether or not the pipeline has changed.
-   *
-   * @return true if the pipeline has changed, false otherwise
-   */
-  @Override
-  public boolean hasChanged() {
-    return super.hasChanged() || haveTransformsChanged() || haveHopsChanged();
   }
 
   private boolean isErrorNode(Node errorHandingNode, Node checkNode) {
@@ -3321,6 +3311,9 @@ public class PipelineMeta extends AbstractMeta
     setInternalFilenameHopVariables(variables);
     setInternalNameHopVariable(variables);
     setInternalEntryCurrentDirectory(variables);
+
+    HopVersionProvider versionProvider = new HopVersionProvider();
+    variables.setVariable(Const.HOP_VERSION, versionProvider.getVersion()[0]);
   }
 
   /**
@@ -3562,10 +3555,7 @@ public class PipelineMeta extends AbstractMeta
       }
 
       return exportFileName;
-    } catch (FileSystemException e) {
-      throw new HopException(
-          BaseMessages.getString(PKG, CONST_ERROR_OPENING_OR_VALIDATING, getFilename()), e);
-    } catch (HopFileException e) {
+    } catch (FileSystemException | HopFileException e) {
       throw new HopException(
           BaseMessages.getString(PKG, CONST_ERROR_OPENING_OR_VALIDATING, getFilename()), e);
     }
@@ -3736,7 +3726,7 @@ public class PipelineMeta extends AbstractMeta
 
   @Override
   public boolean hasMissingPlugins() {
-    return missingPipeline != null && !missingPipeline.isEmpty();
+    return !Utils.isEmpty(missingPipeline);
   }
 
   private static String getTransformMetaCacheKey(TransformMeta transformMeta, boolean info) {

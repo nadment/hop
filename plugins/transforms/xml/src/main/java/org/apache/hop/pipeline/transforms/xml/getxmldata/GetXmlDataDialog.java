@@ -17,6 +17,13 @@
 
 package org.apache.hop.pipeline.transforms.xml.getxmldata;
 
+import static org.apache.hop.pipeline.transforms.xml.getxmldata.GetXmlDataField.getElementTypeByDesc;
+import static org.apache.hop.pipeline.transforms.xml.getxmldata.GetXmlDataField.getElementTypeDesc;
+import static org.apache.hop.pipeline.transforms.xml.getxmldata.GetXmlDataField.getResultTypeByDesc;
+import static org.apache.hop.pipeline.transforms.xml.getxmldata.GetXmlDataField.getResultTypeCode;
+import static org.apache.hop.pipeline.transforms.xml.getxmldata.GetXmlDataField.getTrimTypeByDesc;
+import static org.apache.hop.pipeline.transforms.xml.getxmldata.GetXmlDataField.getTrimTypeCode;
+
 import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -186,16 +193,25 @@ public class GetXmlDataDialog extends BaseTransformDialog {
 
   String precNodeName = null;
 
-  private PdOption readFilePdOption;
-  private PdOption readUrlPdOption;
-  private PdOption readXmlPdOption;
-  private PdOption readHopVfsPdOption;
-  private PdOption readSnippetPdOption;
+  private final PdOption readFilePdOption;
+  private final PdOption readUrlPdOption;
+  private final PdOption readXmlPdOption;
+  private final PdOption readHopVfsPdOption;
+  private final PdOption readSnippetPdOption;
 
   public GetXmlDataDialog(
       Shell parent, IVariables variables, GetXmlDataMeta transformMeta, PipelineMeta pipelineMeta) {
     super(parent, variables, transformMeta, pipelineMeta);
     input = transformMeta;
+
+    // Initialize options and set default values. This prevents a potential NPE in get() methods.
+    // if getLoopPathList() is not triggered and these 5 options remain uninitialized.
+    // Call option.resetOption() before using any option instance.
+    this.readFilePdOption = new PdOption();
+    this.readUrlPdOption = new PdOption();
+    this.readXmlPdOption = new PdOption();
+    this.readHopVfsPdOption = new PdOption();
+    this.readSnippetPdOption = new PdOption();
   }
 
   @Override
@@ -1006,7 +1022,7 @@ public class GetXmlDataDialog extends BaseTransformDialog {
 
     setButtonPositions(new Button[] {wGet, wGetSnippet}, margin, null);
 
-    final int FieldsRows = input.getInputFields().length;
+    final int FieldsRows = input.getInputFields().size();
 
     ColumnInfo[] colinf =
         new ColumnInfo[] {
@@ -1286,7 +1302,7 @@ public class GetXmlDataDialog extends BaseTransformDialog {
           @Override
           public void enrich(EnterTextDialog enterTextDialog) {
 
-            readSnippetPdOption = new PdOption();
+            readSnippetPdOption.resetOption();
             readSnippetPdOption.setUseSnippet(true);
 
             Button wbbLoopPathList = getWbbLoopPathList(enterTextDialog.getShell());
@@ -1473,14 +1489,14 @@ public class GetXmlDataDialog extends BaseTransformDialog {
                     BaseMessages.getString(PKG, "GetXMLDataDialog.AskURL.Message"));
             url = d.open();
           }
-          readUrlPdOption = new PdOption();
+          readUrlPdOption.resetOption();
           readUrlPdOption.setUseUrl(true);
           readUrlPdOption.setValidating(meta.isValidating());
           LoopNodesImportProgressDialog pd =
               new LoopNodesImportProgressDialog(shell, url, readUrlPdOption);
           populateLoopPaths(url, pd);
 
-        } else if (meta.getIsAFile()) {
+        } else if (meta.isAFile()) {
           // Read file
           String str = xmlSource;
           if (str == null) {
@@ -1496,7 +1512,7 @@ public class GetXmlDataDialog extends BaseTransformDialog {
             if (!StringUtil.isEmpty(filePath)) {
               str = filePath;
             }
-            readFilePdOption = new PdOption();
+            readFilePdOption.resetOption();
             readFilePdOption.setEncoding(
                 meta.getEncoding() == null ? CONST_UTF_8 : meta.getEncoding());
             readFilePdOption.setValidating(meta.isValidating());
@@ -1516,7 +1532,7 @@ public class GetXmlDataDialog extends BaseTransformDialog {
                     null);
             xml = d.open();
           }
-          readXmlPdOption = new PdOption();
+          readXmlPdOption.resetOption();
           readXmlPdOption.setValidating(meta.isValidating());
           LoopNodesImportProgressDialog pd =
               new LoopNodesImportProgressDialog(shell, xml, readXmlPdOption);
@@ -1530,7 +1546,7 @@ public class GetXmlDataDialog extends BaseTransformDialog {
           // Check the first file
 
           if (fileinputList.getFile(0).exists()) {
-            readHopVfsPdOption = new PdOption();
+            readHopVfsPdOption.resetOption();
             readHopVfsPdOption.setValidating(meta.isValidating());
             readHopVfsPdOption.setEncoding(
                 meta.getEncoding() == null ? CONST_UTF_8 : meta.getEncoding());
@@ -1605,7 +1621,7 @@ public class GetXmlDataDialog extends BaseTransformDialog {
                   shell, url, variables.resolve(meta.getLoopXPath()), readUrlPdOption);
           populateFields(prd, clearFields);
 
-        } else if (meta.getIsAFile()) {
+        } else if (meta.isAFile()) {
           // Read file
           String str = xmlSource;
           if (str == null) {
@@ -1710,39 +1726,37 @@ public class GetXmlDataDialog extends BaseTransformDialog {
    * @param in The TextFileInputMeta object to obtain the data from.
    */
   public void getData(GetXmlDataMeta in) {
-    if (in.getFileName() != null) {
+    if (in.getFilesList() != null) {
       wFilenameList.removeAll();
 
-      for (int i = 0; i < in.getFileName().length; i++) {
+      for (GetXmlFileItem file : in.getFilesList()) {
         wFilenameList.add(
-            new String[] {
-              in.getFileName()[i],
-              in.getFileMask()[i],
-              in.getExludeFileMask()[i],
-              in.getRequiredFilesDesc(in.getFileRequired()[i]),
-              in.getRequiredFilesDesc(in.getIncludeSubFolders()[i])
-            });
+            file.getFileName(),
+            file.getFileMask(),
+            file.getExcludeFileMask(),
+            in.getRequiredFilesDesc(file.getFileRequired()),
+            in.getRequiredFilesDesc(file.getIncludeSubFolders()));
       }
 
       wFilenameList.removeEmptyRows();
       wFilenameList.setRowNums();
       wFilenameList.optWidth(true);
     }
-    wInclFilename.setSelection(in.includeFilename());
-    wInclRownum.setSelection(in.includeRowNumber());
-    wAddResult.setSelection(in.addResultFile());
-    wNameSpaceAware.setSelection(in.isNamespaceAware());
+    wInclFilename.setSelection(in.isIncludeFilename());
+    wInclRownum.setSelection(in.isIncludeRowNumber());
+    wAddResult.setSelection(in.isAddResultFile());
+    wNameSpaceAware.setSelection(in.isNameSpaceAware());
     wReadUrl.setSelection(in.isReadUrl());
     wIgnoreComment.setSelection(in.isIgnoreComments());
     wValidating.setSelection(in.isValidating());
-    wUseToken.setSelection(in.isuseToken());
+    wUseToken.setSelection(in.isUseToken());
     wIgnoreEmptyFile.setSelection(in.isIgnoreEmptyFile());
-    wDoNotFailIfNoFile.setSelection(in.isdoNotFailIfNoFile());
+    wDoNotFailIfNoFile.setSelection(in.isDoNotFailIfNoFile());
     wXMLStreamField.setSelection(in.isInFields());
-    wXMLIsAFile.setSelection(in.getIsAFile());
+    wXMLIsAFile.setSelection(in.isAFile());
 
-    if (in.getXMLField() != null) {
-      wXMLField.setText(in.getXMLField());
+    if (in.getXmlField() != null) {
+      wXMLField.setText(in.getXmlField());
     }
 
     if (in.getFilenameField() != null) {
@@ -1765,8 +1779,8 @@ public class GetXmlDataDialog extends BaseTransformDialog {
     }
 
     logDebug(BaseMessages.getString(PKG, "GetXMLDataDialog.Log.GettingFieldsInfo"));
-    for (int i = 0; i < in.getInputFields().length; i++) {
-      GetXmlDataField field = in.getInputFields()[i];
+    for (int i = 0; i < in.getInputFields().size(); i++) {
+      GetXmlDataField field = in.getInputFields().get(i);
 
       if (field != null) {
         TableItem item = wFields.table.getItem(i);
@@ -1783,7 +1797,7 @@ public class GetXmlDataDialog extends BaseTransformDialog {
         String decim = field.getDecimalSymbol();
         String trim = field.getTrimTypeDesc();
         String rep =
-            field.isRepeated()
+            field.isRepeat()
                 ? BaseMessages.getString(PKG, CONST_SYSTEM_COMBO_YES)
                 : BaseMessages.getString(PKG, "System.Combo.No");
 
@@ -1833,29 +1847,29 @@ public class GetXmlDataDialog extends BaseTransformDialog {
     wFields.setRowNums();
     wFields.optWidth(true);
 
-    if (in.getShortFileNameField() != null) {
-      wShortFileFieldName.setText(in.getShortFileNameField());
+    if (in.getShortFileFieldName() != null) {
+      wShortFileFieldName.setText(in.getShortFileFieldName());
     }
-    if (in.getPathField() != null) {
-      wPathFieldName.setText(in.getPathField());
+    if (in.getPathFieldName() != null) {
+      wPathFieldName.setText(in.getPathFieldName());
     }
-    if (in.isHiddenField() != null) {
-      wIsHiddenName.setText(in.isHiddenField());
+    if (in.getHiddenFieldName() != null) {
+      wIsHiddenName.setText(in.getHiddenFieldName());
     }
-    if (in.getLastModificationDateField() != null) {
-      wLastModificationTimeName.setText(in.getLastModificationDateField());
+    if (in.getLastModificationTimeFieldName() != null) {
+      wLastModificationTimeName.setText(in.getLastModificationTimeFieldName());
     }
-    if (in.getUriField() != null) {
-      wUriName.setText(in.getUriField());
+    if (in.getUriNameFieldName() != null) {
+      wUriName.setText(in.getUriNameFieldName());
     }
-    if (in.getRootUriField() != null) {
-      wRootUriName.setText(in.getRootUriField());
+    if (in.getRootUriNameFieldName() != null) {
+      wRootUriName.setText(in.getRootUriNameFieldName());
     }
-    if (in.getExtensionField() != null) {
-      wExtensionFieldName.setText(in.getExtensionField());
+    if (in.getExtensionFieldName() != null) {
+      wExtensionFieldName.setText(in.getExtensionFieldName());
     }
-    if (in.getSizeField() != null) {
-      wSizeFieldName.setText(in.getSizeField());
+    if (in.getSizeFieldName() != null) {
+      wSizeFieldName.setText(in.getSizeFieldName());
     }
 
     wTransformName.selectAll();
@@ -1900,28 +1914,34 @@ public class GetXmlDataDialog extends BaseTransformDialog {
     in.setAddResultFile(wAddResult.getSelection());
     in.setIncludeFilename(wInclFilename.getSelection());
     in.setIncludeRowNumber(wInclRownum.getSelection());
-    in.setNamespaceAware(wNameSpaceAware.getSelection());
+    in.setNameSpaceAware(wNameSpaceAware.getSelection());
     in.setReadUrl(wReadUrl.getSelection());
     in.setIgnoreComments(wIgnoreComment.getSelection());
     in.setValidating(wValidating.getSelection());
-    in.setuseToken(wUseToken.getSelection());
+    in.setUseToken(wUseToken.getSelection());
     in.setIgnoreEmptyFile(wIgnoreEmptyFile.getSelection());
-    in.setdoNotFailIfNoFile(wDoNotFailIfNoFile.getSelection());
+    in.setDoNotFailIfNoFile(wDoNotFailIfNoFile.getSelection());
 
     in.setInFields(wXMLStreamField.getSelection());
-    in.setIsAFile(wXMLIsAFile.getSelection());
-    in.setXMLField(wXMLField.getText());
+    in.setAFile(wXMLIsAFile.getSelection());
+    in.setXmlField(wXMLField.getText());
 
     int nrFiles = wFilenameList.getItemCount();
     int nrFields = wFields.nrNonEmpty();
 
-    in.allocate(nrFiles, nrFields);
-    in.setFileName(wFilenameList.getItems(0));
-    in.setFileMask(wFilenameList.getItems(1));
-    in.setExcludeFileMask(wFilenameList.getItems(2));
-    in.setFileRequired(wFilenameList.getItems(3));
-    in.setIncludeSubFolders(wFilenameList.getItems(4));
+    in.getFilesList().clear();
+    for (int i = 0; i < wFilenameList.getItemCount(); i++) {
+      GetXmlFileItem fi =
+          new GetXmlFileItem(
+              wFilenameList.getItem(i, 1),
+              wFilenameList.getItem(i, 2),
+              wFilenameList.getItem(i, 3),
+              wFilenameList.getItem(i, 4),
+              wFilenameList.getItem(i, 5));
+      in.getFilesList().add(fi);
+    }
 
+    in.getInputFields().clear();
     for (int i = 0; i < nrFields; i++) {
       GetXmlDataField field = new GetXmlDataField();
 
@@ -1929,29 +1949,29 @@ public class GetXmlDataDialog extends BaseTransformDialog {
 
       field.setName(item.getText(1));
       field.setXPath(item.getText(2));
-      field.setElementType(GetXmlDataField.getElementTypeByDesc(item.getText(3)));
-      field.setResultType(GetXmlDataField.getResultTypeByDesc(item.getText(4)));
-      field.setType(ValueMetaBase.getType(item.getText(5)));
+      field.setElementType(getElementTypeDesc(getElementTypeByDesc(item.getText(3))));
+      field.setResultType(getResultTypeCode(getResultTypeByDesc(item.getText(4))));
+      field.setType(ValueMetaBase.getTypeDesc(ValueMetaBase.getType(item.getText(5))));
       field.setFormat(item.getText(6));
       field.setLength(Const.toInt(item.getText(7), -1));
       field.setPrecision(Const.toInt(item.getText(8), -1));
       field.setCurrencySymbol(item.getText(9));
       field.setDecimalSymbol(item.getText(10));
       field.setGroupSymbol(item.getText(11));
-      field.setTrimType(GetXmlDataField.getTrimTypeByDesc(item.getText(12)));
-      field.setRepeated(
+      field.setTrimType(getTrimTypeCode(getTrimTypeByDesc(item.getText(12))));
+      field.setRepeat(
           BaseMessages.getString(PKG, CONST_SYSTEM_COMBO_YES).equalsIgnoreCase(item.getText(13)));
 
-      in.getInputFields()[i] = field;
+      in.getInputFields().add(field);
     }
-    in.setShortFileNameField(wShortFileFieldName.getText());
-    in.setPathField(wPathFieldName.getText());
-    in.setIsHiddenField(wIsHiddenName.getText());
-    in.setLastModificationDateField(wLastModificationTimeName.getText());
-    in.setUriField(wUriName.getText());
-    in.setRootUriField(wRootUriName.getText());
-    in.setExtensionField(wExtensionFieldName.getText());
-    in.setSizeField(wSizeFieldName.getText());
+    in.setShortFileFieldName(wShortFileFieldName.getText());
+    in.setPathFieldName(wPathFieldName.getText());
+    in.setHiddenFieldName(wIsHiddenName.getText());
+    in.setLastModificationTimeFieldName(wLastModificationTimeName.getText());
+    in.setUriNameFieldName(wUriName.getText());
+    in.setRootUriNameFieldName(wRootUriName.getText());
+    in.setExtensionFieldName(wExtensionFieldName.getText());
+    in.setSizeFieldName(wSizeFieldName.getText());
   }
 
   // check if the loop xpath is given
@@ -1979,9 +1999,6 @@ public class GetXmlDataDialog extends BaseTransformDialog {
       if (!checkLoopXPath(oneMeta)) {
         return;
       }
-      PipelineMeta previewMeta =
-          PipelinePreviewFactory.generatePreviewPipeline(
-              metadataProvider, oneMeta, wTransformName.getText());
 
       EnterNumberDialog numberDialog =
           new EnterNumberDialog(
@@ -1992,6 +2009,11 @@ public class GetXmlDataDialog extends BaseTransformDialog {
 
       int previewSize = numberDialog.open();
       if (previewSize > 0) {
+        oneMeta.setRowLimit(previewSize);
+        PipelineMeta previewMeta =
+            PipelinePreviewFactory.generatePreviewPipeline(
+                metadataProvider, oneMeta, wTransformName.getText());
+
         PipelinePreviewProgressDialog progressDialog =
             new PipelinePreviewProgressDialog(
                 shell,
